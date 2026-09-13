@@ -219,9 +219,35 @@ function matrixToCSV(matrix, geneNames, sampleNames) {
   return [header, ...rows].join('\n');
 }
 
-// === Worker message handler ===
 self.onmessage = function(e) {
-  const { rawMatrix, geneNames, sampleNames, sampleGroups, cpmThreshold } = e.data;
+  const { rawCountsCSV, rawMetaCSV, cpmThreshold } = e.data;
+
+  // 0. Parse CSVs
+  const lines = rawCountsCSV.trim().split('\n');
+  const header = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+  const sampleNames = header.slice(1);
+
+  const geneNames = [];
+  const rawMatrix = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const parts = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+    geneNames.push(parts[0]);
+    rawMatrix.push(parts.slice(1).map(Number));
+  }
+
+  // Parse metadata
+  const metaLines = rawMetaCSV.trim().split('\n');
+  const groupMap = {};
+  for (let i = 1; i < metaLines.length; i++) {
+    if (!metaLines[i].trim()) continue;
+    const [s, g] = metaLines[i].split(',').map(str => str.trim().replace(/^"|"$/g, ''));
+    groupMap[s] = g;
+  }
+
+  const sampleGroups = sampleNames.map((name, idx) => 
+    groupMap[name] || (idx % 2 === 0 ? 'Control' : 'Treated')
+  );
 
   // 1. Filter
   const { filteredMatrix, filteredGenes } = filterByCPM(rawMatrix, geneNames, cpmThreshold, 2);

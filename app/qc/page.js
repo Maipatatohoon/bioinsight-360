@@ -21,7 +21,6 @@ export default function QCPage() {
     async function loadInitialData() {
       try {
         setLoading(true);
-
         if (Storage.getItem('analysisMode') === 'downstream') {
           router.replace('/consensus');
           return;
@@ -37,75 +36,35 @@ export default function QCPage() {
           rawMetaCSV = await metaRes.text();
         }
 
-        // Parse CSVs into matrix
-        const lines = rawCountsCSV.trim().split('\n');
-        const header = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
-        const sampleNames = header.slice(1);
+        const worker = new Worker('/workers/qcWorker.js');
+        
+        worker.onmessage = (e) => {
+          const { filteredCSV, qcData: newQcData } = e.data;
+          Storage.setItem('filteredCounts', filteredCSV);
+          setQcData(newQcData);
+          setLoading(false);
+          worker.terminate();
+        };
 
-        const geneNames = [];
-        const rawMatrix = [];
-        for (let i = 1; i < lines.length; i++) {
-          if (!lines[i].trim()) continue;
-          const parts = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
-          geneNames.push(parts[0]);
-          rawMatrix.push(parts.slice(1).map(Number));
-        }
+        worker.onerror = (error) => {
+          console.error('QC Worker Error:', error);
+          setLoading(false);
+          worker.terminate();
+        };
 
-        // Parse metadata
-        const metaLines = rawMetaCSV.trim().split('\n');
-        const groupMap = {};
-        for (let i = 1; i < metaLines.length; i++) {
-          if (!metaLines[i].trim()) continue;
-          const [s, g] = metaLines[i].split(',').map(str => str.trim().replace(/^"|"$/g, ''));
-          groupMap[s] = g;
-        }
+        worker.postMessage({
+          rawCountsCSV,
+          rawMetaCSV,
+          cpmThreshold
+        });
 
-        const sampleGroups = sampleNames.map((name, idx) => 
-          groupMap[name] || (idx % 2 === 0 ? 'Control' : 'Treated')
-        );
-
-        setRawState({ rawMatrix, geneNames, sampleNames, sampleGroups });
       } catch (err) {
         console.error('Error loading data:', err);
+        setLoading(false);
       }
     }
     loadInitialData();
-  }, [router]);
-
-  useEffect(() => {
-    if (!rawState) return;
-
-    setLoading(true);
-    const worker = new Worker('/workers/qcWorker.js');
-    
-    worker.onmessage = (e) => {
-      const { filteredCSV, qcData: newQcData } = e.data;
-      Storage.setItem('filteredCounts', filteredCSV);
-      setQcData(newQcData);
-      setLoading(false);
-      worker.terminate();
-    };
-
-    worker.onerror = (error) => {
-      console.error('QC Worker Error:', error);
-      setLoading(false);
-      worker.terminate();
-    };
-
-    // Pass necessary data to the worker
-    const { rawMatrix, geneNames, sampleNames, sampleGroups } = rawState;
-    worker.postMessage({
-      rawMatrix,
-      geneNames,
-      sampleNames,
-      sampleGroups,
-      cpmThreshold
-    });
-
-    return () => {
-      worker.terminate(); // Cleanup if unmounted before completion
-    };
-  }, [rawState, cpmThreshold]);
+  }, [router, cpmThreshold]);
 
   if (loading || !qcData) {
     return (
