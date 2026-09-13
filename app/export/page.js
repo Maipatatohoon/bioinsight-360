@@ -105,7 +105,7 @@ export default function ExportPage() {
         const binaryMatrix = Array.from({ length: numGenes }, () => new Array(numPipelines).fill(0));
         pData.pipelines.forEach((pipe, pIdx) => {
           pipe.results.forEach((res, gIdx) => {
-            if (res && Math.abs(res.log2fc) >= 1.0 && res.padj <= 0.05) {
+            if (res && Math.abs(res.log2fc) >= 1.0 && res.pvalue <= 0.05) {
               const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
               if (binaryMatrix[actualIdx]) {
                 binaryMatrix[actualIdx][pIdx] = 1;
@@ -117,7 +117,7 @@ export default function ExportPage() {
 
         // Pathways
         const pipelineEnrichments = pData.pipelines.map(pipe => {
-          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.padj <= 0.1).map(r => geneNames[r.gene_index]);
+          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05).map(r => geneNames[r.gene_index]);
           return runGOEnrichment(degs, goAnnotations, geneNames);
         });
         const pathways = computePathwayConsensus(pipelineEnrichments, 0.1);

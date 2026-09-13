@@ -64,18 +64,16 @@ export default function PathwaysPage() {
           pipelineData = formatDownstreamPipelines(deseq2, edger, limma);
         } else {
           // Load counts + metadata from sessionStorage or demo fallback
-          let rawCountsCSV = Storage.getItem('rawCounts');
+          let filteredCSV = Storage.getItem('filteredCounts') || Storage.getItem('rawCounts');
           let rawMetaCSV = Storage.getItem('rawMetadata');
 
-          if (!rawCountsCSV || !rawMetaCSV) {
-            const countRes = await fetch('/data/demo_counts.csv');
-            rawCountsCSV = await countRes.text();
-            const metaRes = await fetch('/data/demo_metadata.csv');
-            rawMetaCSV = await metaRes.text();
+          if (!filteredCSV || !rawMetaCSV) {
+            router.replace('/qc');
+            return;
           }
 
           // Parse CSVs into matrix
-          const lines = rawCountsCSV.trim().split('\n');
+          const lines = filteredCSV.trim().split('\n');
           const header = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
           const sampleNames = header.slice(1);
 
@@ -107,14 +105,16 @@ export default function PathwaysPage() {
             }
           });
 
+          // Yield to browser before blocking
+          await new Promise(resolve => setTimeout(resolve, 10));
           // Run all 6 pipelines
           pipelineData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
         }
 
-        // Compute DEGs per pipeline (|log2FC| >= 0.5, padj <= 0.1)
+        // Compute DEGs per pipeline (|log2FC| >= 0.5, pvalue <= 0.05)
         const pipelineEnrichments = pipelineData.pipelines.map(pipe => {
           const degs = pipe.results
-            .filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.padj <= 0.1)
+            .filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05)
             .map(r => pipelineData.geneNames[r.gene_index]);
           return runGOEnrichment(degs, goAnnotations, pipelineData.geneNames);
         });
