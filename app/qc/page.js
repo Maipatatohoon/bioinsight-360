@@ -74,53 +74,37 @@ export default function QCPage() {
 
   useEffect(() => {
     if (!rawState) return;
+
+    setLoading(true);
+    const worker = new Worker('/workers/qcWorker.js');
     
-    // Dynamically import the filter to avoid SSR issues or we can import it at the top
-    import('../../lib/cpm_filter').then(({ filterByCPM, matrixToCSV }) => {
-      // Defer heavy computation by one frame so the loading spinner renders first
-      setTimeout(() => {
-      const { rawMatrix, geneNames, sampleNames, sampleGroups } = rawState;
-      
-      // Filter genes based on CPM slider
-      const { filteredMatrix, filteredGenes } = filterByCPM(rawMatrix, geneNames, cpmThreshold, 2);
-
-      // Save filtered CSV for Consensus page
-      const filteredCSV = matrixToCSV(filteredMatrix, filteredGenes, sampleNames);
+    worker.onmessage = (e) => {
+      const { filteredCSV, qcData: newQcData } = e.data;
       Storage.setItem('filteredCounts', filteredCSV);
-
-      // Compute QC metrics on RAW matrix to reflect true sequencing depth
-      const librarySizes = computeLibrarySizes(rawMatrix);
-      const detectionRates = computeDetectionRates(rawMatrix);
-      const corrMatrix = computeSampleCorrelation(filteredMatrix);
-      const outlierStatus = detectOutliers(librarySizes, detectionRates);
-
-      // Compute PCA
-      const samplesMatrix = Array.from({ length: sampleNames.length }, (_, s) => 
-        filteredMatrix.map(row => row[s])
-      );
-      const pcaResult = computePCA(samplesMatrix, 2);
-
-      const avgLibSize = librarySizes.reduce((a, b) => a + b, 0) / librarySizes.length;
-      const avgDetRate = detectionRates.reduce((a, b) => a + b, 0) / detectionRates.length;
-      const outlierCount = outlierStatus.filter(s => s.isOutlier).length;
-
-      setQcData({
-        sampleNames,
-        sampleGroups,
-        librarySizes,
-        detectionRates,
-        corrMatrix,
-        outlierStatus,
-        pcaResult,
-        avgLibSize,
-        avgDetRate,
-        outlierCount,
-        genesRetained: filteredGenes.length,
-        totalGenes: geneNames.length
-      });
+      setQcData(newQcData);
       setLoading(false);
-      }, 50); // end setTimeout — gives browser time to paint loading spinner
+      worker.terminate();
+    };
+
+    worker.onerror = (error) => {
+      console.error('QC Worker Error:', error);
+      setLoading(false);
+      worker.terminate();
+    };
+
+    // Pass necessary data to the worker
+    const { rawMatrix, geneNames, sampleNames, sampleGroups } = rawState;
+    worker.postMessage({
+      rawMatrix,
+      geneNames,
+      sampleNames,
+      sampleGroups,
+      cpmThreshold
     });
+
+    return () => {
+      worker.terminate(); // Cleanup if unmounted before completion
+    };
   }, [rawState, cpmThreshold]);
 
   if (loading || !qcData) {
