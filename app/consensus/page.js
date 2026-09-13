@@ -31,6 +31,9 @@ export default function ConsensusPage() {
         const mode = Storage.getItem('analysisMode') || 'compute';
         setAnalysisMode(mode);
 
+        // Defer heavy computation so loading spinner renders first
+        await new Promise(resolve => setTimeout(resolve, 50));
+
         let pData;
         
         if (mode === 'downstream') {

@@ -26,10 +26,9 @@ export default function Navbar() {
         <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }} className="desktop-nav">
           <Link href="/upload" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Upload</Link>
           <Link href="/qc" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>QC</Link>
-          <Link href="/consensus" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Consensus</Link>
-          <Link href="/pathways" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Pathways</Link>
-          <Link href="/export" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Export</Link>
-          <Link href="/modernize" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Modernize</Link>
+          <Link href="#" onClick={(e) => e.preventDefault()} className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Consensus</Link>
+          <Link href="#" onClick={(e) => e.preventDefault()} className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Pathways</Link>
+          <Link href="#" onClick={(e) => e.preventDefault()} className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Export</Link>
         </div>
 
         {/* Mobile Toggle */}
@@ -48,10 +47,9 @@ export default function Navbar() {
           <div className="flex flex-col gap-4">
             <Link href="/upload" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Upload</Link>
             <Link href="/qc" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>QC</Link>
-            <Link href="/consensus" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Consensus</Link>
-            <Link href="/pathways" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Pathways</Link>
-            <Link href="/export" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Export</Link>
-            <Link href="/modernize" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Modernize</Link>
+            <Link href="#" onClick={(e) => e.preventDefault()} style={{ color: 'var(--text-primary)' }}>Consensus</Link>
+            <Link href="#" onClick={(e) => e.preventDefault()} style={{ color: 'var(--text-primary)' }}>Pathways</Link>
+            <Link href="#" onClick={(e) => e.preventDefault()} style={{ color: 'var(--text-primary)' }}>Export</Link>
           </div>
         </div>
       )}

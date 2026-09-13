@@ -77,6 +77,8 @@ export default function QCPage() {
     
     // Dynamically import the filter to avoid SSR issues or we can import it at the top
     import('../../lib/cpm_filter').then(({ filterByCPM, matrixToCSV }) => {
+      // Defer heavy computation by one frame so the loading spinner renders first
+      setTimeout(() => {
       const { rawMatrix, geneNames, sampleNames, sampleGroups } = rawState;
       
       // Filter genes based on CPM slider
@@ -117,6 +119,7 @@ export default function QCPage() {
         totalGenes: geneNames.length
       });
       setLoading(false);
+      }, 50); // end setTimeout — gives browser time to paint loading spinner
     });
   }, [rawState, cpmThreshold]);
 
