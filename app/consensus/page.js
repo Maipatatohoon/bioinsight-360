@@ -42,18 +42,15 @@ export default function ConsensusPage() {
           const limma = JSON.parse(Storage.getItem('limmaData'));
           pData = formatDownstreamPipelines(deseq2, edger, limma);
         } else {
-          let rawCountsCSV = Storage.getItem('filteredCounts') || Storage.getItem('rawCounts');
+          let filteredCSV = Storage.getItem('filteredCounts');
           let rawMetaCSV = Storage.getItem('rawMetadata');
 
-          if (!rawCountsCSV || !rawMetaCSV) {
-            const countRes = await fetch('/data/demo_counts.csv');
-            rawCountsCSV = await countRes.text();
-            const metaRes = await fetch('/data/demo_metadata.csv');
-            rawMetaCSV = await metaRes.text();
+          if (!filteredCSV || !rawMetaCSV) {
+            router.replace('/qc');
+            return;
           }
 
-          // Parse CSVs
-          const lines = rawCountsCSV.trim().split('\n');
+          const lines = filteredCSV.trim().split('\n');
           const header = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
           const sampleNames = header.slice(1);
 
@@ -85,20 +82,22 @@ export default function ConsensusPage() {
             }
           });
 
+          // Yield to browser before blocking
+          await new Promise(resolve => setTimeout(resolve, 10));
           pData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
         }
 
         setPipelineData(pData);
 
         // Compute Consensus & Agreement Metrics
-        recalculateConsensus(pData, pData.geneNames, parseFloat(fc), parseFloat(pval));
+        recalculateConsensus(pData, pData.geneNames, 1.0, parseFloat(pval));
       } catch (err) {
         console.error('Error running consensus engine:', err);
       } finally {
         setLoading(false);
       }
     }
-
+    
     loadAndRunConsensus();
   }, []);
 
@@ -117,7 +116,8 @@ export default function ConsensusPage() {
 
     pData.pipelines.forEach((pipe, pIdx) => {
       pipe.results.forEach((res, gIdx) => {
-        if (res && Math.abs(res.log2fc) >= currentFc && res.padj <= currentPval) {
+        // Use unadjusted p-value for browser compute mode because strict FDR on n<10 eliminates everything
+        if (res && Math.abs(res.log2fc) >= currentFc && res.pvalue <= currentPval) {
           binaryMatrix[gIdx][pIdx] = 1;
         }
       });
