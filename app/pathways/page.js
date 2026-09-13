@@ -404,6 +404,18 @@ export default function PathwaysPage() {
                         </td>
                       </tr>
                     ))
+                  ) : pathwayConsensus.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: '#334155' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🧬</div>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '0.5rem' }}>No Pathways Found</h3>
+                        <p style={{ maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>
+                          There were 0 overlapping GO terms detected. This could be due to small log2FC values, or a mismatch in gene nomenclature.
+                          <br/><br/>
+                          <strong>Note:</strong> BioInsight 360 expects official <strong>Gene Symbols</strong> (e.g., TP53, BRCA1). If your dataset uses Ensembl IDs (e.g., ENSG00000141510) or other database accessions, please convert them to symbols before uploading.
+                        </p>
+                      </td>
+                    </tr>
                   ) : (
                     <tr>
                       <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: '#334155' }}>
