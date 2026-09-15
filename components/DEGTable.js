@@ -6,8 +6,10 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
   // Helper to extract min valid p-value from pvalues array
   const getMinPvalue = (pvalues) => {
     if (!pvalues || !Array.isArray(pvalues) || pvalues.length === 0) return 1;
-    const valid = pvalues.filter(p => p > 0 && isFinite(p));
-    return valid.length > 0 ? Math.min(...valid) : 1;
+    const valid = pvalues.filter(p => p !== null && p !== undefined && isFinite(p));
+    if (valid.length === 0) return 1;
+    const minP = Math.min(...valid);
+    return minP <= 0 ? Number.MIN_VALUE : minP;
   };
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -30,8 +32,8 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
       const matchesCategory = categoryFilter === 'All' || gene.category === categoryMap[categoryFilter];
       return matchesSearch && matchesCategory;
     }).sort((a, b) => {
-      const aVal = sortConfig.key === 'pvalue' ? getMinPvalue(a.pvalues) : (a[sortConfig.key] || 0);
-      const bVal = sortConfig.key === 'pvalue' ? getMinPvalue(b.pvalues) : (b[sortConfig.key] || 0);
+      const aVal = sortConfig.key === 'pvalue' ? getMinPvalue(a.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(a[sortConfig.key] || 0) : (a[sortConfig.key] || 0);
+      const bVal = sortConfig.key === 'pvalue' ? getMinPvalue(b.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(b[sortConfig.key] || 0) : (b[sortConfig.key] || 0);
       
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;

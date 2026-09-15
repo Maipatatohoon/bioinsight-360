@@ -7,8 +7,10 @@ const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
 function getMinPvalue(pvalues) {
   if (!pvalues || !Array.isArray(pvalues) || pvalues.length === 0) return 1;
-  const valid = pvalues.filter(p => p > 0 && isFinite(p));
-  return valid.length > 0 ? Math.min(...valid) : 1;
+  const valid = pvalues.filter(p => p !== null && p !== undefined && isFinite(p));
+  if (valid.length === 0) return 1;
+  const minP = Math.min(...valid);
+  return minP <= 0 ? Number.MIN_VALUE : minP;
 }
 
 export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 1, pThreshold = 0.05, onGeneSelect }) {

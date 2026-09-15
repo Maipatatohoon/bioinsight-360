@@ -115,7 +115,8 @@ export default function PathwaysPage() {
         const pipelineEnrichments = pipelineData.pipelines.map(pipe => {
           const degs = pipe.results
             .filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05)
-            .map(r => pipelineData.geneNames[r.gene_index]);
+            .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
+            .filter(Boolean);
           return runGOEnrichment(degs, goAnnotations, pipelineData.geneNames);
         });
 

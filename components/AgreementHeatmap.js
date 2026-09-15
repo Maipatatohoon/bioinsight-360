@@ -26,7 +26,7 @@ export default function AgreementHeatmap({ pipelines = [], consensusResults = []
       const pipeline = pipelines.find(p => p.name === pipelineName);
       if (!pipeline || gIdx === undefined) return 0;
       const res = pipeline.results[gIdx];
-      return (res && res.padj <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) ? 1 : 0;
+      return (res && res.pvalue <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) ? 1 : 0;
     });
   });
 

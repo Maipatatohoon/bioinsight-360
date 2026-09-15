@@ -118,7 +118,10 @@ export default function ConsensusPage() {
       pipe.results.forEach((res, gIdx) => {
         // Use unadjusted p-value for browser compute mode because strict FDR on n<10 eliminates everything
         if (res && Math.abs(res.log2fc) >= currentFc && res.pvalue <= currentPval) {
-          binaryMatrix[gIdx][pIdx] = 1;
+          const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
+          if (binaryMatrix[actualIdx]) {
+            binaryMatrix[actualIdx][pIdx] = 1;
+          }
         }
       });
     });
@@ -334,7 +337,7 @@ export default function ConsensusPage() {
                             const res = pipe.results.find(r => r && r.gene_index === selectedGene.geneName);
                             // gene_index in downstream is numerical, but geneName was pushed into geneNames array
                             const targetRes = pipe.results.find(r => r && pipelineData.geneNames[r.gene_index] === selectedGene.geneName) || res;
-                            const isSig = targetRes && targetRes.padj <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
+                            const isSig = targetRes && targetRes.pvalue <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
                             return (
                               <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', background: 'rgba(226, 232, 240, 0.5)', borderRadius: '4px' }}>
                                 <span>{name}</span>
@@ -385,7 +388,7 @@ export default function ConsensusPage() {
               {activeTab === 'pipeline' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
                   {pipelineData.pipelines.map((pipe, idx) => {
-                    const sigCount = pipe.results.filter(r => r && Math.abs(r.log2fc) >= parseFloat(fc) && r.padj <= parseFloat(pval)).length;
+                    const sigCount = pipe.results.filter(r => r && Math.abs(r.log2fc) >= parseFloat(fc) && r.pvalue <= parseFloat(pval)).length;
                     return (
                       <div key={idx} className="glass-card" style={{ padding: '1.25rem' }}>
                         <h4 style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>

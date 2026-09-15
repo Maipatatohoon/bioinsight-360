@@ -117,7 +117,7 @@ export default function ExportPage() {
 
         // Pathways
         const pipelineEnrichments = pData.pipelines.map(pipe => {
-          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05).map(r => geneNames[r.gene_index]);
+          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
           return runGOEnrichment(degs, goAnnotations, geneNames);
         });
         const pathways = computePathwayConsensus(pipelineEnrichments, 0.1);
