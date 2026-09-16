@@ -119,12 +119,18 @@ export default function ExportPage() {
         });
         const kappa = computeFleissKappa(binaryMatrix);
 
+        // Build proper GO background universe from ALL genes in annotations + input genes
+        const goUniverseSet = new Set();
+        goAnnotations.forEach(go => go.genes.forEach(g => goUniverseSet.add(g.toUpperCase())));
+        geneNames.forEach(g => goUniverseSet.add(g.toUpperCase()));
+        const goUniverse = Array.from(goUniverseSet);
+
         // Pathways
         const pipelineEnrichments = pData.pipelines.map(pipe => {
           const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= Math.min(userFc, 0.5) && r.pvalue <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
-          return runGOEnrichment(degs, goAnnotations, geneNames);
+          return runGOEnrichment(degs, goAnnotations, goUniverse);
         });
-        const pathways = computePathwayConsensus(pipelineEnrichments, 0.1);
+        const pathways = computePathwayConsensus(pipelineEnrichments, 0.2);
 
         setSummaryData({
           sampleNames,

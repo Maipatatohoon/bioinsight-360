@@ -115,17 +115,25 @@ export default function PathwaysPage() {
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '0.5');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
 
+        // Build a comprehensive background universe from ALL genes in GO annotations
+        // This is the standard practice — using only input genes as universe gives bad stats
+        const goUniverseSet = new Set();
+        goAnnotations.forEach(go => go.genes.forEach(g => goUniverseSet.add(g.toUpperCase())));
+        // Also include all input genes
+        pipelineData.geneNames.forEach(g => goUniverseSet.add(g.toUpperCase()));
+        const goUniverse = Array.from(goUniverseSet);
+
         // Compute DEGs per pipeline using user thresholds
         const pipelineEnrichments = pipelineData.pipelines.map(pipe => {
           const degs = pipe.results
             .filter(r => r && Math.abs(r.log2fc) >= userFc && r.pvalue <= userPval)
             .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
             .filter(Boolean);
-          return runGOEnrichment(degs, goAnnotations, pipelineData.geneNames);
+          return runGOEnrichment(degs, goAnnotations, goUniverse);
         });
 
-        // Compute Pathway Consensus
-        const consensus = computePathwayConsensus(pipelineEnrichments, 0.1);
+        // Compute Pathway Consensus — use a more lenient pThreshold for small gene sets
+        const consensus = computePathwayConsensus(pipelineEnrichments, 0.2);
         setPathwayConsensus(consensus);
         if (consensus.length > 0) {
           setSelectedPathway(consensus[0]);

@@ -230,13 +230,18 @@ export default function UploadPage() {
                 }
             }
 
-            // Guess sample columns (exclude things like Gene, id, ENSG)
-            const firstRow = parsed.data[0];
-            const sampleCols = Object.keys(firstRow).filter(k => 
-                !k.toLowerCase().includes('gene') && 
-                !k.toLowerCase().includes('id') && 
-                k !== 'X' && k.trim() !== ''
-            );
+            const firstRow = parsed.data[0] || {};
+
+            // Annotation columns common in featureCounts/HTSeq/STAR output — never sample columns
+            const ANNOTATION_COLS = new Set(['chr','chrom','chromosome','start','end','strand','length',
+              'width','biotype','gene_biotype','gene_type','gene_name','gene_id','transcript_id',
+              'transcript_name','exon_id','protein_id','havana_gene','havana_transcript','description',
+              'source','feature','score','frame','attribute','class_code','nearest_ref','link','x']);
+            const sampleCols = Object.keys(firstRow).filter(k => {
+              const kl = k.toLowerCase().trim();
+              return kl !== '' && !ANNOTATION_COLS.has(kl) &&
+                !kl.includes('gene') && !kl.includes('_id') && kl !== 'x';
+            });
 
             // Clean parsed data: remove empty keys and ensure 'Gene' is the first key
             const cleanData = parsed.data.map(row => {
@@ -422,9 +427,16 @@ export default function UploadPage() {
                                             }
                                         }
                                         
-                                        const sampleCols = Object.keys(parsed.data[0] || {}).filter(k => 
-                                            !k.toLowerCase().includes('gene') && !k.toLowerCase().includes('id') && k !== 'X' && k !== ''
-                                        );
+                                        // Annotation columns common in featureCounts/HTSeq/STAR output — never sample columns
+                                        const ANNOTATION_COLS = new Set(['chr','chrom','chromosome','start','end','strand','length',
+                                          'width','biotype','gene_biotype','gene_type','gene_name','gene_id','transcript_id',
+                                          'transcript_name','exon_id','protein_id','havana_gene','havana_transcript','description',
+                                          'source','feature','score','frame','attribute','class_code','nearest_ref','link','x']);
+                                        const sampleCols = Object.keys(parsed.data[0] || {}).filter(k => {
+                                          const kl = k.toLowerCase().trim();
+                                          return kl !== '' && !ANNOTATION_COLS.has(kl) &&
+                                            !kl.includes('gene') && !kl.includes('_id') && kl !== 'x';
+                                        });
                                         
                                         // Clean parsed data: remove empty keys
                                         const cleanData = parsed.data.map(row => {
