@@ -36,9 +36,11 @@ export default function UploadPage() {
                 const parsedCounts = Papa.parse(countsText, { header: true, skipEmptyLines: true });
                 const parsedMeta = Papa.parse(metaText, { header: true, skipEmptyLines: true });
                 
-                const sampleCols = Object.keys(parsedCounts.data[0] || {}).filter(k => k !== 'Gene' && k !== 'id');
-                const ctrlCount = parsedMeta.data.filter(d => d.Group === 'Control').length;
-                const trtCount = parsedMeta.data.filter(d => d.Group === 'Treated').length;
+                const sampleCols = Object.keys(parsedCounts.data[0] || {}).filter(k => k.toLowerCase() !== 'gene' && k.toLowerCase() !== 'id');
+                // Handle case-insensitive column names (demo uses 'group', some use 'Group')
+                const getGroup = (d) => d.Group || d.group || d.condition || d.Condition || '';
+                const ctrlCount = parsedMeta.data.filter(d => getGroup(d).toLowerCase().includes('control')).length;
+                const trtCount = parsedMeta.data.filter(d => !getGroup(d).toLowerCase().includes('control') && getGroup(d).trim() !== '').length;
                 
                 setSummary({
                     genes: parsedCounts.data.length,
@@ -47,12 +49,16 @@ export default function UploadPage() {
                     treatedCount: trtCount
                 });
                 
-                Storage.setItem('countsData', JSON.stringify(parsedCounts.data));
-                Storage.setItem('metaData', JSON.stringify(parsedMeta.data));
+                
                 Storage.setItem('rawCounts', Papa.unparse(parsedCounts.data));
                 Storage.setItem('rawMetadata', Papa.unparse(parsedMeta.data));
                 setMetaAssignments(parsedMeta.data);
                 Storage.setItem('analysisMode', 'compute');
+                // Clear stale artifacts from previous runs
+                Storage.removeItem('filteredCounts');
+                Storage.removeItem('deseq2Data');
+                Storage.removeItem('edgerData');
+                Storage.removeItem('limmaData');
                 setDegSummary(null);
             } else {
                 // Mock fallback if files are not present
@@ -64,12 +70,11 @@ export default function UploadPage() {
                 });
                 const mock = [{Sample: 'Sample_1', Group: 'Control'}];
                 const mockCounts = [{Gene: 'GENE1', Sample_1: 10}];
-                Storage.setItem('countsData', JSON.stringify(mockCounts));
-                Storage.setItem('metaData', JSON.stringify(mock));
                 Storage.setItem('rawCounts', Papa.unparse(mockCounts));
                 Storage.setItem('rawMetadata', Papa.unparse(mock));
                 setMetaAssignments(mock);
                 Storage.setItem('analysisMode', 'compute');
+                Storage.removeItem('filteredCounts');
                 setDegSummary(null);
             }
         } catch (e) {
@@ -95,24 +100,41 @@ export default function UploadPage() {
     const handleLoadDegDemo = async () => {
         setLoading(true);
         try {
-            // Mocking the fetching of 3 pipelines for the MVP
-            const mockDegData = Array.from({length: 3000}, (_, i) => {
-                const isSig = i < 150;
+            // Use real gene names from our GO annotations so pathways work correctly
+            const realGenes = [
+                'TP53','BRCA1','EGFR','MYC','KRAS','PTEN','RB1','AKT1','VEGFA','MTOR',
+                'PIK3CA','BRAF','CDK4','CDK6','BCL2','BAX','CASP3','CASP9','GAPDH','ACTB',
+                'TNF','IL6','IL1B','STAT3','JAK2','NFKB1','TGFB1','WNT1','NOTCH1','HIF1A',
+                'ERBB2','FGFR1','PDGFRA','KIT','MET','ALK','ROS1','RET','RAF1','MAP2K1',
+                'MAPK1','MAPK3','MDM2','CDKN2A','SMAD4','FOS','JUN'
+            ];
+            // Build mock data: first ~15 genes are significant DEGs, rest are not
+            const mockDegData = realGenes.map((gene, i) => {
+                const isSig = i < 15;
                 return {
-                    Gene_ID: `GENE_${i}`,
-                    logFC: isSig ? (Math.random() * 4 - 2).toFixed(2) : (Math.random() * 0.5 - 0.25).toFixed(2),
-                    padj: isSig ? (Math.random() * 0.05).toFixed(4) : (Math.random() * 0.99 + 0.01).toFixed(4)
+                    Gene_ID: gene,
+                    logFC: isSig ? (Math.random() * 4 - 2).toFixed(3) : (Math.random() * 0.5 - 0.25).toFixed(3),
+                    pvalue: isSig ? (Math.random() * 0.01).toFixed(6) : (Math.random() * 0.99 + 0.01).toFixed(4),
+                    padj: isSig ? (Math.random() * 0.04).toFixed(6) : (Math.random() * 0.99 + 0.01).toFixed(4)
                 };
             });
             // Slightly jitter the other tools so they aren't identical
-            const mockEdgeR = mockDegData.map(g => g && ({...g, padj: (parseFloat(g.padj) * (Math.random() * 0.4 + 0.8)).toFixed(4) }));
-            const mockLimma = mockDegData.map(g => g && ({...g, padj: (parseFloat(g.padj) * (Math.random() * 0.4 + 0.8)).toFixed(4) }));
+            const jitter = (g) => ({...g, 
+                padj: (parseFloat(g.padj) * (Math.random() * 0.4 + 0.8)).toFixed(6),
+                pvalue: (parseFloat(g.pvalue) * (Math.random() * 0.4 + 0.8)).toFixed(6)
+            });
+            const mockEdgeR = mockDegData.map(jitter);
+            const mockLimma = mockDegData.map(jitter);
 
             Storage.setItem('deseq2Data', JSON.stringify(mockDegData));
             Storage.setItem('edgerData', JSON.stringify(mockEdgeR));
             Storage.setItem('limmaData', JSON.stringify(mockLimma));
             
             Storage.setItem('analysisMode', 'downstream');
+            // Clear stale compute-mode artifacts
+            Storage.removeItem('rawCounts');
+            Storage.removeItem('filteredCounts');
+            Storage.removeItem('rawMetadata');
             
             setDegSummary({
                 genes: mockDegData.length,
@@ -246,8 +268,6 @@ export default function UploadPage() {
                 treatedCount: trtCount
             });
 
-            Storage.setItem('countsData', JSON.stringify(cleanData));
-            Storage.setItem('metaData', JSON.stringify(mockMeta));
             setMetaAssignments(mockMeta);
             
             // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
@@ -256,6 +276,11 @@ export default function UploadPage() {
             Storage.setItem('rawMetadata', Papa.unparse(mockMeta));
 
             Storage.setItem('analysisMode', 'compute');
+            // Clear stale artifacts from previous runs
+            Storage.removeItem('filteredCounts');
+            Storage.removeItem('deseq2Data');
+            Storage.removeItem('edgerData');
+            Storage.removeItem('limmaData');
             setDegSummary(null);
             
         } catch (error) {
@@ -422,8 +447,6 @@ export default function UploadPage() {
                                             treatedCount: mockMeta.filter(d => d.Group === 'Treated').length
                                         });
 
-                                        Storage.setItem('countsData', JSON.stringify(cleanData));
-                                        Storage.setItem('metaData', JSON.stringify(mockMeta));
                                         setMetaAssignments(mockMeta);
                                         
                                         // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
@@ -432,6 +455,11 @@ export default function UploadPage() {
                                         Storage.setItem('rawMetadata', Papa.unparse(mockMeta));
                                         
                                         Storage.setItem('analysisMode', 'compute');
+                                        // Clear stale artifacts from previous runs
+                                        Storage.removeItem('filteredCounts');
+                                        Storage.removeItem('deseq2Data');
+                                        Storage.removeItem('edgerData');
+                                        Storage.removeItem('limmaData');
                                         setDegSummary(null);
                                     } catch (err) {
                                         alert("Failed to parse file: " + err.message);
@@ -565,6 +593,10 @@ export default function UploadPage() {
                                                 
                                                 if (nextState.deseq2 && nextState.edger && nextState.limma) {
                                                     Storage.setItem('analysisMode', 'downstream');
+                                                    // Clear stale compute-mode artifacts
+                                                    Storage.removeItem('rawCounts');
+                                                    Storage.removeItem('filteredCounts');
+                                                    Storage.removeItem('rawMetadata');
                                                     setDegSummary({
                                                         genes: parsed.data.length,
                                                         tools: 3

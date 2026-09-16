@@ -12,8 +12,8 @@ export default function PCAScatter({ pcaData }) {
 
   const { pc1, pc2, sampleNames = [], sampleGroups = [], varianceExplained = [0, 0] } = pcaData;
 
-  const controlIndices = sampleGroups.map((g, i) => g === 'Control' ? i : -1).filter(i => i !== -1);
-  const treatedIndices = sampleGroups.map((g, i) => g === 'Treated' ? i : -1).filter(i => i !== -1);
+  const controlIndices = sampleGroups.map((g, i) => (g || '').toLowerCase().includes('control') ? i : -1).filter(i => i !== -1);
+  const treatedIndices = sampleGroups.map((g, i) => (g || '').toLowerCase().includes('control') ? -1 : i).filter(i => i !== -1);
 
   const traces = [
     {

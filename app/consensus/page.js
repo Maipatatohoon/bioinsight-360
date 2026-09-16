@@ -133,6 +133,9 @@ export default function ConsensusPage() {
   const handleSliderChange = (newFc, newPval) => {
     setFc(newFc);
     setPval(newPval);
+    // Persist thresholds so pathways/export pages use the same values
+    Storage.setItem('consensusFcThreshold', String(newFc));
+    Storage.setItem('consensusPvalThreshold', String(newPval));
     if (pipelineData) {
       recalculateConsensus(pipelineData, pipelineData.geneNames, parseFloat(newFc), parseFloat(newPval));
     }

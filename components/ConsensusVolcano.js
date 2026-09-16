@@ -27,7 +27,7 @@ export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 
     const data = consensusResults.filter((g) => g.category === group.category);
     return {
       x: data.map((g) => g.log2fc_median),
-      y: data.map((g) => -Math.log10(getMinPvalue(g.pvalues))),
+      y: data.map((g) => -Math.log10(Math.max(getMinPvalue(g.pvalues), 1e-300))),
       text: data.map((g) => `Gene: ${g.geneName}<br>Score: ${g.consensusScore}<br>Category: ${g.category}<br>Log2FC: ${g.log2fc_median?.toFixed(2)}<br>P-value: ${getMinPvalue(g.pvalues).toExponential(2)}`),
       mode: 'markers',
       type: 'scatter',

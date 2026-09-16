@@ -111,10 +111,14 @@ export default function PathwaysPage() {
           pipelineData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
         }
 
-        // Compute DEGs per pipeline (|log2FC| >= 0.5, pvalue <= 0.05)
+        // Read thresholds set by user on Consensus page (fall back to sensible defaults)
+        const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '0.5');
+        const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
+
+        // Compute DEGs per pipeline using user thresholds
         const pipelineEnrichments = pipelineData.pipelines.map(pipe => {
           const degs = pipe.results
-            .filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05)
+            .filter(r => r && Math.abs(r.log2fc) >= userFc && r.pvalue <= userPval)
             .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
             .filter(Boolean);
           return runGOEnrichment(degs, goAnnotations, pipelineData.geneNames);

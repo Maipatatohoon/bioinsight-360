@@ -89,7 +89,11 @@ export default function ExportPage() {
           pData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
         }
 
-        consensus = computeConsensus(pData.pipelines, geneNames, 1.0, 0.05);
+        // Read thresholds set by user on Consensus page
+        const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
+        const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
+
+        consensus = computeConsensus(pData.pipelines, geneNames, userFc, userPval);
 
         const goRes = await fetch('/data/go_annotations.json');
         const goJson = await goRes.json();
@@ -105,7 +109,7 @@ export default function ExportPage() {
         const binaryMatrix = Array.from({ length: numGenes }, () => new Array(numPipelines).fill(0));
         pData.pipelines.forEach((pipe, pIdx) => {
           pipe.results.forEach((res, gIdx) => {
-            if (res && Math.abs(res.log2fc) >= 1.0 && res.pvalue <= 0.05) {
+            if (res && Math.abs(res.log2fc) >= userFc && res.pvalue <= userPval) {
               const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
               if (binaryMatrix[actualIdx]) {
                 binaryMatrix[actualIdx][pIdx] = 1;
@@ -117,7 +121,7 @@ export default function ExportPage() {
 
         // Pathways
         const pipelineEnrichments = pData.pipelines.map(pipe => {
-          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= 0.5 && r.pvalue <= 0.05).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
+          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= Math.min(userFc, 0.5) && r.pvalue <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
           return runGOEnrichment(degs, goAnnotations, geneNames);
         });
         const pathways = computePathwayConsensus(pipelineEnrichments, 0.1);

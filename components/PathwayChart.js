@@ -12,17 +12,20 @@ export default function PathwayChart({ pathwayConsensusResults = [] }) {
 
   const sortedData = [...pathwayConsensusResults].sort((a, b) => {
     if (b.consensusScore !== a.consensusScore) return b.consensusScore - a.consensusScore;
-    return (a.adjPValueMedian || 1) - (b.adjPValueMedian || 1);
+    return (a.adjPValueMedian ?? 1) - (b.adjPValueMedian ?? 1);
   }).slice(0, 15).reverse();
 
-  const colors = sortedData.map(p => p.category === 'Consensus Pathway' ? '#059669' : '#d97706');
+  const colors = sortedData.map(p => 
+    p.category === 'high_confidence' ? '#059669' : 
+    p.category === 'moderate_confidence' ? '#d97706' : '#f97316'
+  );
 
   return (
     <div className="w-full h-full min-h-[400px]">
       <Plot
         data={[{
           y: sortedData.map(p => p.name),
-          x: sortedData.map(p => -Math.log10(p.adjPValueMedian || 1)),
+          x: sortedData.map(p => -Math.log10(Math.max(p.adjPValueMedian || 1, 1e-300))),
           type: 'bar',
           orientation: 'h',
           marker: { color: colors },
