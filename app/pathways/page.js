@@ -8,6 +8,20 @@ import { runGOEnrichment, computePathwayConsensus } from '../../lib/enrichment';
 import { runAllPipelines, formatDownstreamPipelines } from '../../lib/consensus';
 import { fetchGoTermDetails } from '../../lib/quickgo_api';
 
+// Minimal CSV row parser — handles quoted fields
+function parseCSVRow(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQuote = !inQuote; }
+    else if (c === ',' && !inQuote) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
 export default function PathwaysPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -72,26 +86,24 @@ export default function PathwaysPage() {
             return;
           }
 
-          // Parse CSVs into matrix
           const lines = filteredCSV.trim().split('\n');
-          const header = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+          const header = parseCSVRow(lines[0]);
           const sampleNames = header.slice(1);
 
           const rawMatrix = [];
           for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
-            const parts = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+            const parts = parseCSVRow(lines[i]);
             geneNames.push(parts[0]);
             rawMatrix.push(parts.slice(1).map(Number));
           }
 
-          // Parse metadata to identify Control vs Treated indices
           const metaLines = rawMetaCSV.trim().split('\n');
           const groupMap = {};
           for (let i = 1; i < metaLines.length; i++) {
             if (!metaLines[i].trim()) continue;
-            const [s, g] = metaLines[i].split(',').map(str => str.trim().replace(/^"|"$/g, ''));
-            groupMap[s] = g.toLowerCase();
+            const [s, g] = parseCSVRow(metaLines[i]);
+            groupMap[s] = (g || '').toLowerCase();
           }
 
           const controlIndices = [];

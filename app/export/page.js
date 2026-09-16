@@ -6,6 +6,19 @@ import { runAllPipelines, computeConsensus, computeFleissKappa, formatDownstream
 import { runGOEnrichment, computePathwayConsensus } from '../../lib/enrichment';
 
 export default function ExportPage() {
+  // Minimal CSV row parser — handles quoted fields
+  function parseCSVRow(line) {
+    const result = [];
+    let cur = '', inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQuote = !inQuote; }
+      else if (c === ',' && !inQuote) { result.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+    result.push(cur.trim());
+    return result;
+  }
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,8 +46,8 @@ export default function ExportPage() {
             const groupMap = {};
             for (let i = 1; i < metaLines.length; i++) {
               if (!metaLines[i].trim()) continue;
-              const [s, g] = metaLines[i].split(',').map(str => str.trim().replace(/^"|"$/g, ''));
-              groupMap[s] = g.toLowerCase();
+              const [s, g] = parseCSVRow(metaLines[i]);
+              groupMap[s] = (g || '').toLowerCase();
               sampleNames.push(s);
             }
             sampleNames.forEach((name, idx) => {
@@ -58,13 +71,13 @@ export default function ExportPage() {
           }
 
           const lines = rawCountsCSV.trim().split('\n');
-          const header = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+          const header = parseCSVRow(lines[0]);
           sampleNames = header.slice(1);
 
           const rawMatrix = [];
           for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
-            const parts = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+            const parts = parseCSVRow(lines[i]);
             geneNames.push(parts[0]);
             rawMatrix.push(parts.slice(1).map(Number));
           }
@@ -73,8 +86,8 @@ export default function ExportPage() {
           const groupMap = {};
           for (let i = 1; i < metaLines.length; i++) {
             if (!metaLines[i].trim()) continue;
-            const [s, g] = metaLines[i].split(',').map(str => str.trim().replace(/^"|"$/g, ''));
-            groupMap[s] = g.toLowerCase();
+            const [s, g] = parseCSVRow(metaLines[i]);
+            groupMap[s] = (g || '').toLowerCase();
           }
 
           sampleNames.forEach((name, idx) => {

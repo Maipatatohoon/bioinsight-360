@@ -28,12 +28,13 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
 
   const filteredData = useMemo(() => {
     return consensusResults.filter(gene => {
+      if (!gene || !gene.geneName) return false;
       const matchesSearch = gene.geneName.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = categoryFilter === 'All' || gene.category === categoryMap[categoryFilter];
       return matchesSearch && matchesCategory;
     }).sort((a, b) => {
-      const aVal = sortConfig.key === 'pvalue' ? getMinPvalue(a.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(a[sortConfig.key] || 0) : (a[sortConfig.key] || 0);
-      const bVal = sortConfig.key === 'pvalue' ? getMinPvalue(b.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(b[sortConfig.key] || 0) : (b[sortConfig.key] || 0);
+      const aVal = sortConfig.key === 'pvalue' ? getMinPvalue(a.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(a[sortConfig.key] ?? 0) : (a[sortConfig.key] ?? 0);
+      const bVal = sortConfig.key === 'pvalue' ? getMinPvalue(b.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(b[sortConfig.key] ?? 0) : (b[sortConfig.key] ?? 0);
       
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;

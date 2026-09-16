@@ -15,7 +15,13 @@ export default function QCPage() {
   const [loading, setLoading] = useState(true);
   const [qcData, setQcData] = useState(null);
   const [cpmThreshold, setCpmThreshold] = useState(1.0);
-  const [rawState, setRawState] = useState(null);
+  const [debouncedCpm, setDebouncedCpm] = useState(1.0);
+
+  // Debounce: only re-run Worker 500ms after user stops dragging
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCpm(cpmThreshold), 500);
+    return () => clearTimeout(t);
+  }, [cpmThreshold]);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -55,7 +61,7 @@ export default function QCPage() {
         worker.postMessage({
           rawCountsCSV,
           rawMetaCSV,
-          cpmThreshold
+          cpmThreshold: debouncedCpm
         });
 
       } catch (err) {
@@ -64,7 +70,7 @@ export default function QCPage() {
       }
     }
     loadInitialData();
-  }, [router, cpmThreshold]);
+  }, [router, debouncedCpm]);
 
   if (loading || !qcData) {
     return (
@@ -247,7 +253,7 @@ export default function QCPage() {
                   [0.5, '#1e1b4b'],
                   [1, '#0284c7']
                 ],
-                zmin: 0.8,
+                zmin: corrMatrix.flat ? Math.max(0, Math.min(...corrMatrix.flat()) - 0.05) : 0,
                 zmax: 1.0,
                 hoverongaps: false
               }]}
