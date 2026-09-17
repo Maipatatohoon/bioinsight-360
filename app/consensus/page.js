@@ -85,13 +85,16 @@ export default function ConsensusPage() {
             groupMap[s] = (g || '').toLowerCase();
           }
 
+          const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
+          const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
+
           const controlIndices = [];
           const treatedIndices = [];
           sampleNames.forEach((name, idx) => {
-            const group = groupMap[name] || (idx % 2 === 0 ? 'control' : 'treated');
-            if (group.includes('control') || group.includes('untreated')) {
+            const group = groupMap[name] || '';
+            if (group.toLowerCase() === activeControlGroup.toLowerCase()) {
               controlIndices.push(idx);
-            } else {
+            } else if (group.toLowerCase() === activeTreatedGroup.toLowerCase()) {
               treatedIndices.push(idx);
             }
           });

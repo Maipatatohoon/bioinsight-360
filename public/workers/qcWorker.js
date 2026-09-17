@@ -280,9 +280,17 @@ self.onmessage = function(e) {
   const corrMatrix = computeSampleCorrelation(filteredMatrix);
   const outlierStatus = detectOutliers(librarySizes, detectionRates);
 
-  // 3. PCA
+  // 3. PCA (log2(CPM+1) normalized)
+  const logCpmMatrix = Array.from({ length: filteredMatrix.length }, (_, g) => {
+    return filteredMatrix[g].map((count, s) => {
+      const lib = librarySizes[s];
+      const cpm = lib > 0 ? (count / lib) * 1e6 : 0;
+      return Math.log2(cpm + 1);
+    });
+  });
+
   const samplesMatrix = Array.from({ length: validSampleNames.length }, (_, s) =>
-    filteredMatrix.map(row => row[s])
+    logCpmMatrix.map(row => row[s])
   );
   const pcaResult = computePCA(samplesMatrix, 2);
 

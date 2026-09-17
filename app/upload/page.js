@@ -27,6 +27,11 @@ export default function UploadPage() {
     const [autoCtrl, setAutoCtrl] = useState('control');
     const [autoTrt, setAutoTrt] = useState('treated');
     const [autoFilter, setAutoFilter] = useState('');
+    
+    // Group Selection State
+    const [uniqueGroups, setUniqueGroups] = useState(['Control', 'Treated']);
+    const [selectedCtrl, setSelectedCtrl] = useState('Control');
+    const [selectedTrt, setSelectedTrt] = useState('Treated');
 
     const handleLoadDemo = async () => {
         setLoading(true);
@@ -46,6 +51,11 @@ export default function UploadPage() {
                 const getGroup = (d) => d.Group || d.group || d.condition || d.Condition || '';
                 const ctrlCount = parsedMeta.data.filter(d => getGroup(d).toLowerCase().includes('control')).length;
                 const trtCount = parsedMeta.data.filter(d => !getGroup(d).toLowerCase().includes('control') && getGroup(d).trim() !== '').length;
+                
+                const uGroups = Array.from(new Set(parsedMeta.data.map(d => getGroup(d)).filter(Boolean)));
+                setUniqueGroups([...uGroups, 'Exclude']);
+                if (uGroups.length > 0) setSelectedCtrl(uGroups.find(g => g.toLowerCase().includes('control')) || uGroups[0]);
+                if (uGroups.length > 1) setSelectedTrt(uGroups.find(g => !g.toLowerCase().includes('control')) || uGroups[1]);
                 
                 setSummary({
                     genes: parsedCounts.data.length,
@@ -669,9 +679,52 @@ export default function UploadPage() {
                             <div>
                                 <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
                                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                                    Type keywords to automatically classify samples (e.g. "Control" and "PCOS").<br/>
-                                    Use <b>Required</b> to only keep specific cell types (e.g. "Oocyte"). Samples lacking the required keyword will be Excluded to prevent biological noise.
+                                    Type keywords to classify samples, or upload your own Metadata CSV.
                                 </p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <label style={{ padding: '0.5rem 1rem', background: '#e2e8f0', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                                    Upload Metadata CSV
+                                    <input type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (!file) return;
+                                        try {
+                                            const text = await file.text();
+                                            let delim = ',';
+                                            if (text.substring(0, text.indexOf('\n')).includes('\t')) delim = '\t';
+                                            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter: delim });
+                                            
+                                            // Assume first column is sample name, second is group
+                                            const metaObj = {};
+                                            parsed.data.forEach(row => {
+                                                const keys = Object.keys(row);
+                                                if (keys.length >= 2) {
+                                                    const sample = row[keys[0]];
+                                                    const group = row[keys[1]];
+                                                    metaObj[sample] = group;
+                                                }
+                                            });
+                                            
+                                            const updated = metaAssignments.map(m => {
+                                                const sName = (m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '');
+                                                // case-insensitive match for sample names if exact match fails
+                                                const matchKey = Object.keys(metaObj).find(k => k === sName) || Object.keys(metaObj).find(k => k.toLowerCase() === sName.toLowerCase());
+                                                return { ...m, Group: matchKey ? metaObj[matchKey] : 'Exclude' };
+                                            });
+                                            
+                                            const uGroups = Array.from(new Set(updated.map(d => d.Group).filter(Boolean)));
+                                            setUniqueGroups([...uGroups, 'Exclude']);
+                                            if (uGroups.length > 0) setSelectedCtrl(uGroups.find(g => g.toLowerCase().includes('control')) || uGroups[0]);
+                                            if (uGroups.length > 1) setSelectedTrt(uGroups.find(g => !g.toLowerCase().includes('control')) || uGroups[1]);
+                                            
+                                            setMetaAssignments(updated);
+                                            Storage.setItem('metaData', JSON.stringify(updated));
+                                            Storage.setItem('rawMetadata', Papa.unparse(updated));
+                                        } catch (err) {
+                                            alert("Failed to parse metadata file: " + err.message);
+                                        }
+                                    }} />
+                                </label>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#f1f5f9', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                 <input type="text" value={autoCtrl} onChange={(e) => setAutoCtrl(e.target.value)} placeholder="Control keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
@@ -717,23 +770,39 @@ export default function UploadPage() {
                                             setMetaAssignments(updated);
                                             Storage.setItem('metaData', JSON.stringify(updated));
                                             Storage.setItem('rawMetadata', Papa.unparse(updated));
-                                            setSummary(prev => ({
-                                                ...prev,
-                                                controlCount: updated.filter(ma => ma.Group === 'Control').length,
-                                                treatedCount: updated.filter(ma => ma.Group === 'Treated').length
-                                            }));
                                         }}
                                     >
-                                        <option value="Control">Control</option>
-                                        <option value="Treated">Treated</option>
-                                        <option value="Exclude">Exclude</option>
+                                        {Array.from(new Set([...uniqueGroups, 'Control', 'Treated', 'Exclude'])).map(g => (
+                                            <option key={g} value={g}>{g}</option>
+                                        ))}
                                     </select>
                                 </div>
                             );})}
                         </div>
 
-                        <div style={{ textAlign: 'right' }}>
-                            <button onClick={() => router.push('/qc')} style={{ padding: '1rem 2.5rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'none'}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                            <div>
+                                <h4 style={{ margin: '0 0 0.5rem 0', color: '#0f172a' }}>Select Analysis Groups</h4>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                    <label style={{ fontSize: '0.9rem', color: '#475569' }}>
+                                        <strong>Control Group: </strong>
+                                        <select value={selectedCtrl} onChange={e => setSelectedCtrl(e.target.value)} style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                            {Array.from(new Set([...uniqueGroups, 'Control', 'Treated'])).map(g => <option key={g} value={g}>{g}</option>)}
+                                        </select>
+                                    </label>
+                                    <label style={{ fontSize: '0.9rem', color: '#475569' }}>
+                                        <strong>Treatment Group: </strong>
+                                        <select value={selectedTrt} onChange={e => setSelectedTrt(e.target.value)} style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                            {Array.from(new Set([...uniqueGroups, 'Control', 'Treated'])).map(g => <option key={g} value={g}>{g}</option>)}
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+                            <button onClick={() => {
+                                Storage.setItem('activeControlGroup', selectedCtrl);
+                                Storage.setItem('activeTreatedGroup', selectedTrt);
+                                router.push('/qc');
+                            }} style={{ padding: '1rem 2.5rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'none'}>
                                 Proceed to QC & Analysis →
                             </button>
                         </div>
