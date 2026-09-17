@@ -238,15 +238,6 @@ self.onmessage = function(e) {
   const header = parseCSVRow(lines[0]);
   const sampleNames = header.slice(1);
 
-  const geneNames = [];
-  const rawMatrix = [];
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const parts = parseCSVRow(lines[i]);
-    geneNames.push(parts[0]);
-    rawMatrix.push(parts.slice(1).map(Number));
-  }
-
   const metaLines = rawMetaCSV.trim().split('\n');
   const groupMap = {};
   for (let i = 1; i < metaLines.length; i++) {
@@ -255,13 +246,33 @@ self.onmessage = function(e) {
     groupMap[s] = g || '';
   }
 
-  const sampleGroups = sampleNames.map((name, idx) => 
-    groupMap[name] || (idx % 2 === 0 ? 'Control' : 'Treated')
-  );
+  const includeIndices = [];
+  const validSampleNames = [];
+  const validSampleGroups = [];
+
+  for (let i = 0; i < sampleNames.length; i++) {
+    const name = sampleNames[i];
+    const group = groupMap[name] || (i % 2 === 0 ? 'Control' : 'Treated');
+    if (group.toLowerCase() !== 'exclude') {
+      includeIndices.push(i);
+      validSampleNames.push(name);
+      validSampleGroups.push(group);
+    }
+  }
+
+  const geneNames = [];
+  const rawMatrix = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const parts = parseCSVRow(lines[i]);
+    geneNames.push(parts[0]);
+    const rowNumbers = parts.slice(1).map(Number);
+    rawMatrix.push(includeIndices.map(idx => rowNumbers[idx]));
+  }
 
   // 1. Filter
   const { filteredMatrix, filteredGenes } = filterByCPM(rawMatrix, geneNames, cpmThreshold, 2);
-  const filteredCSV = matrixToCSV(filteredMatrix, filteredGenes, sampleNames);
+  const filteredCSV = matrixToCSV(filteredMatrix, filteredGenes, validSampleNames);
 
   // 2. QC metrics on raw matrix
   const librarySizes = computeLibrarySizes(rawMatrix);
@@ -270,7 +281,7 @@ self.onmessage = function(e) {
   const outlierStatus = detectOutliers(librarySizes, detectionRates);
 
   // 3. PCA
-  const samplesMatrix = Array.from({ length: sampleNames.length }, (_, s) =>
+  const samplesMatrix = Array.from({ length: validSampleNames.length }, (_, s) =>
     filteredMatrix.map(row => row[s])
   );
   const pcaResult = computePCA(samplesMatrix, 2);
@@ -282,7 +293,7 @@ self.onmessage = function(e) {
   self.postMessage({
     filteredCSV,
     qcData: {
-      sampleNames, sampleGroups, librarySizes, detectionRates, corrMatrix,
+      sampleNames: validSampleNames, sampleGroups: validSampleGroups, librarySizes, detectionRates, corrMatrix,
       outlierStatus, pcaResult, avgLibSize, avgDetRate, outlierCount,
       genesRetained: filteredGenes.length, totalGenes: geneNames.length
     }
