@@ -159,6 +159,9 @@ export default function ConsensusPage() {
   const modConfCount = consensusResults.filter(r => r && r.category === 'moderate_confidence').length;
   const sensCount = consensusResults.filter(r => r && r.category === 'method_sensitive').length;
   const totalDEGs = highConfCount + modConfCount;
+  
+  const upRegCount = consensusResults.filter(r => r && r.category !== 'not_significant' && r.log2fc_median > 0).length;
+  const downRegCount = consensusResults.filter(r => r && r.category !== 'not_significant' && r.log2fc_median < 0).length;
 
   let kappaLabel = 'Poor Agreement';
   let kappaColor = '#e11d48';
@@ -251,7 +254,7 @@ export default function ConsensusPage() {
       ) : (
         <>
           {/* Summary Stat Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
             <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
               <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Total Consensus DEGs</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#0f172a' }}>{totalDEGs}</div>
@@ -276,6 +279,25 @@ export default function ConsensusPage() {
               <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Method-Sensitive DEGs</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#f97316' }}>{sensCount}</div>
               <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem' }}>● Unstable across methods</div>
+            </div>
+          </div>
+
+          {/* Upregulated / Downregulated Sub-Cards */}
+          <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2.5rem' }}>
+            <div className="glass-card" style={{ flex: 1, padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: '4px solid #ef4444' }}>
+              <div>
+                <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', fontWeight: '600', marginBottom: '0.25rem' }}>Upregulated DEGs</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Consensus Log₂FC &gt; 0</div>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ef4444' }}>{upRegCount}</div>
+            </div>
+            
+            <div className="glass-card" style={{ flex: 1, padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: '4px solid #3b82f6' }}>
+              <div>
+                <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', fontWeight: '600', marginBottom: '0.25rem' }}>Downregulated DEGs</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Consensus Log₂FC &lt; 0</div>
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3b82f6' }}>{downRegCount}</div>
             </div>
           </div>
 
