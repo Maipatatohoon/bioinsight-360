@@ -666,17 +666,26 @@ export default function UploadPage() {
                         </div>
                         
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-                            <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
+                            <div>
+                                <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
+                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                                    Type keywords to automatically classify samples (e.g. "Control" and "PCOS").<br/>
+                                    Use <b>Required</b> to only keep specific cell types (e.g. "Oocyte"). Samples lacking the required keyword will be Excluded to prevent biological noise.
+                                </p>
+                            </div>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#f1f5f9', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                 <input type="text" value={autoCtrl} onChange={(e) => setAutoCtrl(e.target.value)} placeholder="Control keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
                                 <input type="text" value={autoTrt} onChange={(e) => setAutoTrt(e.target.value)} placeholder="Treated keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
                                 <input type="text" value={autoFilter} onChange={(e) => setAutoFilter(e.target.value)} placeholder="Required (e.g. Oocyte)" style={{ width: '130px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} title="If set, samples lacking this word are Excluded." />
                                 <button onClick={() => {
                                     const updated = metaAssignments.map(m => {
-                                        const s = m.Sample.toLowerCase();
-                                        if (autoFilter && !s.includes(autoFilter.toLowerCase())) return { ...m, Group: 'Exclude' };
-                                        if (autoCtrl && s.includes(autoCtrl.toLowerCase())) return { ...m, Group: 'Control' };
-                                        if (autoTrt && s.includes(autoTrt.toLowerCase())) return { ...m, Group: 'Treated' };
+                                        const sName = (m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').toLowerCase();
+                                        const sMeta = Object.values(m).join(' ').toLowerCase();
+                                        const searchTarget = sName + ' ' + sMeta;
+                                        
+                                        if (autoFilter && !searchTarget.includes(autoFilter.toLowerCase())) return { ...m, Group: 'Exclude' };
+                                        if (autoCtrl && searchTarget.includes(autoCtrl.toLowerCase())) return { ...m, Group: 'Control' };
+                                        if (autoTrt && searchTarget.includes(autoTrt.toLowerCase())) return { ...m, Group: 'Treated' };
                                         return { ...m, Group: 'Exclude' };
                                     });
                                     setMetaAssignments(updated);
@@ -691,15 +700,20 @@ export default function UploadPage() {
                             </div>
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
-                            {metaAssignments.map((m) => (
-                                <div key={m.Sample} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                                    <span style={{ fontWeight: 500, color: m.Group === 'Exclude' ? '#94a3b8' : '#0f172a' }}>{m.Sample}</span>
+                            {metaAssignments.map((m, idx) => {
+                                const sampleName = m.Sample || m.sample || m.ID || m.id || m.Name || m.name || `Sample_${idx}`;
+                                return (
+                                <div key={sampleName} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                                    <span style={{ fontWeight: 500, color: m.Group === 'Exclude' ? '#94a3b8' : '#0f172a' }}>{sampleName}</span>
                                     <select 
                                         style={{ background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '0.3rem 0.5rem' }} 
                                         value={m.Group}
                                         onChange={(e) => {
                                             const newGroup = e.target.value;
-                                            const updated = metaAssignments.map(ma => ma.Sample === m.Sample ? { ...ma, Group: newGroup } : ma);
+                                            const updated = metaAssignments.map(ma => {
+                                                const maName = ma.Sample || ma.sample || ma.ID || ma.id || ma.Name || ma.name;
+                                                return maName === sampleName ? { ...ma, Group: newGroup } : ma;
+                                            });
                                             setMetaAssignments(updated);
                                             Storage.setItem('metaData', JSON.stringify(updated));
                                             Storage.setItem('rawMetadata', Papa.unparse(updated));
@@ -715,7 +729,7 @@ export default function UploadPage() {
                                         <option value="Exclude">Exclude</option>
                                     </select>
                                 </div>
-                            ))}
+                            );})}
                         </div>
 
                         <div style={{ textAlign: 'right' }}>

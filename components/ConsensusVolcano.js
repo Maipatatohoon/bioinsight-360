@@ -5,12 +5,14 @@ import dynamic from 'next/dynamic';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
-function getMinPvalue(pvalues) {
+function getMedianPvalue(pvalues) {
   if (!pvalues || !Array.isArray(pvalues) || pvalues.length === 0) return 1;
   const valid = pvalues.filter(p => p !== null && p !== undefined && isFinite(p));
   if (valid.length === 0) return 1;
-  const minP = Math.min(...valid);
-  return minP <= 0 ? Number.MIN_VALUE : minP;
+  valid.sort((a, b) => a - b);
+  const mid = Math.floor(valid.length / 2);
+  const med = valid.length % 2 !== 0 ? valid[mid] : (valid[mid - 1] + valid[mid]) / 2;
+  return med <= 0 ? Number.MIN_VALUE : med;
 }
 
 export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 1, pThreshold = 0.05, onGeneSelect }) {
@@ -27,8 +29,8 @@ export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 
     const data = consensusResults.filter((g) => g.category === group.category);
     return {
       x: data.map((g) => g.log2fc_median),
-      y: data.map((g) => -Math.log10(Math.max(getMinPvalue(g.pvalues), 1e-300))),
-      text: data.map((g) => `Gene: ${g.geneName}<br>Score: ${g.consensusScore}<br>Category: ${g.category}<br>Log2FC: ${g.log2fc_median?.toFixed(2)}<br>P-value: ${getMinPvalue(g.pvalues).toExponential(2)}`),
+      y: data.map((g) => -Math.log10(Math.max(getMedianPvalue(g.pvalues), 1e-300))),
+      text: data.map((g) => `Gene: ${g.geneName}<br>Score: ${g.consensusScore}<br>Category: ${g.category}<br>Log2FC: ${g.log2fc_median?.toFixed(2)}<br>P-value: ${getMedianPvalue(g.pvalues).toExponential(2)}`),
       mode: 'markers',
       type: 'scatter',
       name: group.name,
