@@ -160,8 +160,8 @@ export default function ConsensusPage() {
   const sensCount = consensusResults.filter(r => r && r.category === 'method_sensitive').length;
   const totalDEGs = highConfCount + modConfCount;
   
-  const upRegCount = consensusResults.filter(r => r && r.category !== 'not_significant' && r.log2fc_median > 0).length;
-  const downRegCount = consensusResults.filter(r => r && r.category !== 'not_significant' && r.log2fc_median < 0).length;
+  const upRegCount = consensusResults.filter(r => r && (r.category === 'high_confidence' || r.category === 'moderate_confidence') && r.log2fc_median > 0).length;
+  const downRegCount = consensusResults.filter(r => r && (r.category === 'high_confidence' || r.category === 'moderate_confidence') && r.log2fc_median < 0).length;
 
   let kappaLabel = 'Poor Agreement';
   let kappaColor = '#e11d48';
