@@ -279,6 +279,19 @@ export default function ConsensusPage() {
             </div>
           </div>
 
+          {totalDEGs === 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #f87171', padding: '1.5rem', borderRadius: '12px', marginBottom: '2.5rem', color: '#991b1b' }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>⚠️</span> 0 DEGs Found — High Variance Warning
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.95rem' }}>
+                The statistical tests detected massive variance inside your experimental groups, which drowned out the disease signal. This almost always happens if you combine distinct biological tissues or cell types (e.g. Oocyte and Cumulus) into the same Control vs. Treated groups. 
+                <br/><br/>
+                <strong>How to fix:</strong> Go back to the <a href="/upload" onClick={(e) => { e.preventDefault(); router.push('/upload'); }} style={{ color: '#b91c1c', textDecoration: 'underline', fontWeight: 'bold', cursor: 'pointer' }}>Upload Page</a> and use the <strong>"Required"</strong> box in the Auto-Assign section to specify exactly which tissue to analyze (e.g., type <code>Oocyte</code>), which will instantly exclude the others.
+              </p>
+            </div>
+          )}
+
           {/* Interactive Navigation Tabs */}
           <div className="glass-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', borderBottom: '1px solid rgba(15, 23, 42, 0.08)', background: 'rgba(241, 245, 249, 0.6)' }}>

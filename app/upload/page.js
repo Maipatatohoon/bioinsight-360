@@ -23,6 +23,11 @@ export default function UploadPage() {
     const [isFetchingGeo, setIsFetchingGeo] = useState(false);
     const [geoError, setGeoError] = useState('');
 
+    // Auto-Assign State
+    const [autoCtrl, setAutoCtrl] = useState('control');
+    const [autoTrt, setAutoTrt] = useState('treated');
+    const [autoFilter, setAutoFilter] = useState('');
+
     const handleLoadDemo = async () => {
         setLoading(true);
         try {
@@ -660,11 +665,35 @@ export default function UploadPage() {
                             ))}
                         </div>
                         
-                        <h4 style={{ marginBottom: '1rem', color: '#334155' }}>Metadata Assignment</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#f1f5f9', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <input type="text" value={autoCtrl} onChange={(e) => setAutoCtrl(e.target.value)} placeholder="Control keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+                                <input type="text" value={autoTrt} onChange={(e) => setAutoTrt(e.target.value)} placeholder="Treated keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+                                <input type="text" value={autoFilter} onChange={(e) => setAutoFilter(e.target.value)} placeholder="Required (e.g. Oocyte)" style={{ width: '130px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} title="If set, samples lacking this word are Excluded." />
+                                <button onClick={() => {
+                                    const updated = metaAssignments.map(m => {
+                                        const s = m.Sample.toLowerCase();
+                                        if (autoFilter && !s.includes(autoFilter.toLowerCase())) return { ...m, Group: 'Exclude' };
+                                        if (autoCtrl && s.includes(autoCtrl.toLowerCase())) return { ...m, Group: 'Control' };
+                                        if (autoTrt && s.includes(autoTrt.toLowerCase())) return { ...m, Group: 'Treated' };
+                                        return { ...m, Group: 'Exclude' };
+                                    });
+                                    setMetaAssignments(updated);
+                                    Storage.setItem('metaData', JSON.stringify(updated));
+                                    Storage.setItem('rawMetadata', Papa.unparse(updated));
+                                    setSummary(prev => ({
+                                        ...prev,
+                                        controlCount: updated.filter(ma => ma.Group === 'Control').length,
+                                        treatedCount: updated.filter(ma => ma.Group === 'Treated').length
+                                    }));
+                                }} style={{ padding: '0.3rem 0.6rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Auto-Assign</button>
+                            </div>
+                        </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
                             {metaAssignments.map((m) => (
                                 <div key={m.Sample} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                                    <span style={{ fontWeight: 500 }}>{m.Sample}</span>
+                                    <span style={{ fontWeight: 500, color: m.Group === 'Exclude' ? '#94a3b8' : '#0f172a' }}>{m.Sample}</span>
                                     <select 
                                         style={{ background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '0.3rem 0.5rem' }} 
                                         value={m.Group}
@@ -683,6 +712,7 @@ export default function UploadPage() {
                                     >
                                         <option value="Control">Control</option>
                                         <option value="Treated">Treated</option>
+                                        <option value="Exclude">Exclude</option>
                                     </select>
                                 </div>
                             ))}
