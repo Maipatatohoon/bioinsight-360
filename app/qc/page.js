@@ -14,16 +14,24 @@ export default function QCPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [qcData, setQcData] = useState(null);
-  const [cpmThreshold, setCpmThreshold] = useState(1.0);
-  const [debouncedCpm, setDebouncedCpm] = useState(1.0);
+  const [cpmThreshold, setCpmThreshold] = useState(() => {
+    return parseFloat(Storage.getItem('cpmThreshold') || '1.0');
+  });
+  const [debouncedCpm, setDebouncedCpm] = useState(() => {
+    return parseFloat(Storage.getItem('cpmThreshold') || '1.0');
+  });
 
   // Debounce: only re-run Worker 500ms after user stops dragging
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedCpm(cpmThreshold), 500);
+    const t = setTimeout(() => {
+      setDebouncedCpm(cpmThreshold);
+      Storage.setItem('cpmThreshold', String(cpmThreshold));
+    }, 500);
     return () => clearTimeout(t);
   }, [cpmThreshold]);
 
   useEffect(() => {
+    let worker;
     async function loadInitialData() {
       try {
         setLoading(true);
@@ -42,7 +50,7 @@ export default function QCPage() {
           rawMetaCSV = await metaRes.text();
         }
 
-        const worker = new Worker('/workers/qcWorker.js');
+        worker = new Worker('/workers/qcWorker.js');
         
         worker.onmessage = (e) => {
           const { filteredCSV, qcData: newQcData } = e.data;
@@ -70,6 +78,11 @@ export default function QCPage() {
       }
     }
     loadInitialData();
+    
+    // Cleanup: Terminate worker if component unmounts before completion
+    return () => {
+      if (worker) worker.terminate();
+    };
   }, [router, debouncedCpm]);
 
   if (loading || !qcData) {

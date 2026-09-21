@@ -106,13 +106,16 @@ export default function PathwaysPage() {
             groupMap[s] = (g || '').toLowerCase();
           }
 
+          const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
+          const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
+
           const controlIndices = [];
           const treatedIndices = [];
           sampleNames.forEach((name, idx) => {
-            const group = groupMap[name] || (idx % 2 === 0 ? 'control' : 'treated');
-            if (group.includes('control') || group.includes('untreated')) {
+            const group = groupMap[name] || '';
+            if (group.toLowerCase() === activeControlGroup.toLowerCase()) {
               controlIndices.push(idx);
-            } else {
+            } else if (group.toLowerCase() === activeTreatedGroup.toLowerCase()) {
               treatedIndices.push(idx);
             }
           });
@@ -124,7 +127,7 @@ export default function PathwaysPage() {
         }
 
         // Read thresholds set by user on Consensus page (fall back to sensible defaults)
-        const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '0.5');
+        const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
 
         // Build a comprehensive background universe from ALL genes in GO annotations

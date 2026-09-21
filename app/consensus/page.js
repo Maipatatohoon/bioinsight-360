@@ -27,8 +27,12 @@ function parseCSVRow(line) {
 export default function ConsensusPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [fc, setFc] = useState(1.0);
-  const [pval, setPval] = useState(0.05);
+  const [fc, setFc] = useState(() => {
+    return typeof window !== 'undefined' ? parseFloat(Storage.getItem('consensusFcThreshold') || '1.0') : 1.0;
+  });
+  const [pval, setPval] = useState(() => {
+    return typeof window !== 'undefined' ? parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05') : 0.05;
+  });
   const [activeTab, setActiveTab] = useState('volcano');
   const [selectedGene, setSelectedGene] = useState(null);
 
