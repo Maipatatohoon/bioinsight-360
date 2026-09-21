@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import PCAScatter from '../../components/PCAScatter';
 import { computeLibrarySizes, computeDetectionRates, computeSampleCorrelation, detectOutliers } from '../../lib/qc';
 import { computePCA } from '../../lib/pca';
+import { motion } from 'framer-motion';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
@@ -119,7 +120,12 @@ export default function QCPage() {
   };
 
   return (
-    <div style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1400px', margin: '0 auto' }}>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1400px', margin: '0 auto' }}
+    >
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
@@ -325,6 +331,6 @@ export default function QCPage() {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

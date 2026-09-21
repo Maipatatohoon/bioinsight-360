@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { fetchGeoMetadata } from '../../lib/geo_api';
+import { motion } from 'framer-motion';
 
 export default function UploadPage() {
     const router = useRouter();
@@ -311,7 +312,12 @@ export default function UploadPage() {
     };
 
     return (
-        <div style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}
+        >
             <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', background: 'linear-gradient(to right, #0284c7, #0d9488)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 700 }}>
                 Upload & Dataset Configuration
             </h1>
@@ -841,6 +847,6 @@ export default function UploadPage() {
             <style jsx>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             `}</style>
-        </div>
+        </motion.div>
     );
 }

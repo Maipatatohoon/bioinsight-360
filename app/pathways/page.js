@@ -7,6 +7,7 @@ import PathwayChart from '../../components/PathwayChart';
 import { runGOEnrichment, computePathwayConsensus } from '../../lib/enrichment';
 import { runAllPipelines, formatDownstreamPipelines } from '../../lib/consensus';
 import { fetchGoTermDetails } from '../../lib/quickgo_api';
+import { motion } from 'framer-motion';
 
 // Minimal CSV row parser — handles quoted fields
 function parseCSVRow(line) {
@@ -196,7 +197,12 @@ export default function PathwaysPage() {
   };
 
   return (
-    <div style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1400px', margin: '0 auto' }}>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1400px', margin: '0 auto' }}
+    >
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
@@ -457,6 +463,6 @@ export default function PathwaysPage() {
           </div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 }

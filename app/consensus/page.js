@@ -9,6 +9,7 @@ import UpSetPlot from '../../components/UpSetPlot';
 import JaccardMatrix from '../../components/JaccardMatrix';
 import DEGTable from '../../components/DEGTable';
 import { runAllPipelines, computeConsensus, computePairwiseJaccard, computeFleissKappa, formatDownstreamPipelines } from '../../lib/consensus';
+import { motion } from 'framer-motion';
 
 // Minimal CSV row parser — handles quoted fields (avoids split(',') breaking on gene descriptions)
 function parseCSVRow(line) {
@@ -186,7 +187,12 @@ export default function ConsensusPage() {
   ];
 
   return (
-    <div style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1400px', margin: '0 auto' }}>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1400px', margin: '0 auto' }}
+    >
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
@@ -475,6 +481,6 @@ export default function ConsensusPage() {
           </div>
         </>
       )}
-    </div>
+    </motion.div>
   );
 }
