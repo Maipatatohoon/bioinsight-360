@@ -453,11 +453,15 @@ export default function UploadPage() {
                                             !kl.includes('gene') && !kl.includes('_id') && kl !== 'x';
                                         });
                                         
-                                        // Clean parsed data: remove empty keys
+                                        // Clean parsed data: remove empty keys and ensure 'Gene' is the first key
                                         const cleanData = parsed.data.map(row => {
-                                            const newRow = { ...row };
-                                            Object.keys(newRow).forEach(key => {
-                                                if (key.trim() === '') delete newRow[key];
+                                            const newRow = {};
+                                            // Find the gene column (the one we didn't classify as a sample, usually first)
+                                            const geneKey = Object.keys(row).find(k => k.trim() !== '' && !sampleCols.includes(k));
+                                            newRow['Gene'] = geneKey ? row[geneKey] : `Gene_${Math.random().toString(36).substr(2,5)}`;
+                                            
+                                            sampleCols.forEach(col => {
+                                                newRow[col] = row[col];
                                             });
                                             return newRow;
                                         });
