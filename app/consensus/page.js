@@ -93,13 +93,27 @@ export default function ConsensusPage() {
           const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
           const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
 
+          const uniqueGroups = Array.from(new Set(Object.values(groupMap).map(g => g.toLowerCase()).filter(g => g !== 'exclude' && g !== '')));
+          
+          let cGroup = activeControlGroup.toLowerCase();
+          let tGroup = activeTreatedGroup.toLowerCase();
+
+          // Intelligent fallback: if the default groups aren't in this dataset, auto-detect them.
+          if (!uniqueGroups.includes(cGroup) && uniqueGroups.length > 0) {
+              cGroup = uniqueGroups.find(g => g.includes('control')) || uniqueGroups[0];
+          }
+          if (!uniqueGroups.includes(tGroup) && uniqueGroups.length > 1) {
+              tGroup = uniqueGroups.find(g => g !== cGroup) || uniqueGroups[1];
+          }
+
           const controlIndices = [];
           const treatedIndices = [];
           sampleNames.forEach((name, idx) => {
             const group = groupMap[name] || '';
-            if (group.toLowerCase() === activeControlGroup.toLowerCase()) {
+            const gLower = group.toLowerCase();
+            if (gLower === cGroup) {
               controlIndices.push(idx);
-            } else if (group.toLowerCase() === activeTreatedGroup.toLowerCase()) {
+            } else if (gLower === tGroup) {
               treatedIndices.push(idx);
             }
           });
