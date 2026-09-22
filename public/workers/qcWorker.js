@@ -134,17 +134,26 @@ function computeSampleCorrelation(matrix) {
   return corr;
 }
 
+function mad(arr) {
+  if (!arr || arr.length === 0) return 0;
+  const med = median(arr);
+  const deviations = arr.map(x => Math.abs(x - med));
+  return median(deviations);
+}
+
 function detectOutliers(librarySizes, detectionRates) {
-  const mS = mean(librarySizes), sS = stddev(librarySizes);
-  const mR = mean(detectionRates), sR = stddev(detectionRates);
+  const medianSize = median(librarySizes);
+  const madSize = mad(librarySizes);
+  const medianRate = median(detectionRates);
+  const madRate = mad(detectionRates);
   return librarySizes.map((size, idx) => {
     const rate = detectionRates[idx];
-    const sizeZ = sS > 0 ? Math.abs((size - mS) / sS) : 0;
-    const rateZ = sR > 0 ? Math.abs((rate - mR) / sR) : 0;
+    const sizeZ = madSize > 0 ? (0.6745 * Math.abs(size - medianSize)) / madSize : 0;
+    const rateZ = madRate > 0 ? (0.6745 * Math.abs(rate - medianRate)) / madRate : 0;
     let isOutlier = false, reason = 'Normal', status = 'Pass';
-    if (sizeZ > 2.5) { isOutlier = true; reason = `Extreme library size (z=${sizeZ.toFixed(2)})`; status = 'Fail'; }
-    else if (rateZ > 2.5) { isOutlier = true; reason = `Low detection rate (z=${rateZ.toFixed(2)})`; status = 'Fail'; }
-    else if (sizeZ > 1.8 || rateZ > 1.8) { reason = 'Moderate deviation from mean'; status = 'Warning'; }
+    if (sizeZ > 3.0) { isOutlier = true; reason = `Extreme library size (Robust z=${sizeZ.toFixed(2)})`; status = 'Fail'; }
+    else if (rateZ > 3.0) { isOutlier = true; reason = `Low detection rate (Robust z=${rateZ.toFixed(2)})`; status = 'Fail'; }
+    else if (sizeZ > 2.0 || rateZ > 2.0) { reason = 'Moderate deviation from median'; status = 'Warning'; }
     return { index: idx, sizeZ, rateZ, isOutlier, reason, status };
   });
 }

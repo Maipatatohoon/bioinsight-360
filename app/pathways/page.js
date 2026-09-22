@@ -131,21 +131,18 @@ export default function PathwaysPage() {
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
 
-        // Build a comprehensive background universe from ALL genes in GO annotations
-        // This is the standard practice — using only input genes as universe gives bad stats
-        const goUniverseSet = new Set();
-        goAnnotations.forEach(go => go.genes.forEach(g => goUniverseSet.add(g.toUpperCase())));
-        // Also include all input genes
-        pipelineData.geneNames.forEach(g => goUniverseSet.add(g.toUpperCase()));
-        const goUniverse = Array.from(goUniverseSet);
+        // BUG 6 FIX: Background universe = only genes measured in the experiment
+        // Using GO-universe genes inflates N and buries real enrichment signals
+        const experimentUniverse = pipelineData.geneNames;
 
         // Compute DEGs per pipeline using user thresholds
+        // BUG 2 FIX: Filter on padj (FDR-corrected) instead of raw pvalue
         const pipelineEnrichments = pipelineData.pipelines.map(pipe => {
           const degs = pipe.results
-            .filter(r => r && Math.abs(r.log2fc) >= userFc && r.pvalue <= userPval)
+            .filter(r => r && Math.abs(r.log2fc) >= userFc && r.padj <= userPval)
             .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
             .filter(Boolean);
-          return runGOEnrichment(degs, goAnnotations, goUniverse);
+          return runGOEnrichment(degs, goAnnotations, experimentUniverse);
         });
 
         // Compute Pathway Consensus — use a more lenient pThreshold for small gene sets

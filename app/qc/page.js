@@ -147,7 +147,11 @@ export default function QCPage() {
       </div>
 
       {/* Low-Expression Gene Filter (CPM) */}
-      <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '3rem', alignItems: 'center' }}>
+      <motion.div 
+        className="glass-card" 
+        initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1, duration: 0.6 }}
+        style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '3rem', alignItems: 'center' }}
+      >
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <span style={{ fontWeight: 'bold', color: '#0f172a' }}>Low-Expression Filter (CPM Cutoff)</span>
@@ -172,10 +176,13 @@ export default function QCPage() {
             <span style={{ fontSize: '1rem', color: '#64748b', fontWeight: 'normal', marginLeft: '0.5rem' }}>/ {totalGenes.toLocaleString()}</span>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}
+      >
         <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Total Samples</div>
           <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#0f172a' }}>{sampleNames.length}</div>
@@ -209,10 +216,13 @@ export default function QCPage() {
             {outlierCount === 0 ? '● All samples passed' : '● Outliers detected'}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* QC Visualizations Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2.5rem' }}>
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}
+        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2.5rem' }}
+      >
         {/* Library Size Bar Chart */}
         <div className="glass-card" style={{ padding: '1.5rem' }}>
           <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>
@@ -254,7 +264,9 @@ export default function QCPage() {
             <PCAScatter pcaData={formattedPCAData} />
           </div>
         </div>
+      </motion.div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
         {/* Sample Correlation Heatmap */}
         <div className="glass-card" style={{ padding: '1.5rem' }}>
           <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>
@@ -291,7 +303,10 @@ export default function QCPage() {
         </div>
 
         {/* Sample Quality Status Table */}
-        <div className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+        <motion.div 
+          initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7, duration: 0.6 }}
+          className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}
+        >
           <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>
             📋 Sample Quality Status
           </h3>
@@ -329,7 +344,7 @@ export default function QCPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </motion.div>
       </div>
     </motion.div>
   );

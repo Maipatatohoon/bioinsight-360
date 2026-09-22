@@ -138,8 +138,7 @@ export default function ConsensusPage() {
 
     pData.pipelines.forEach((pipe, pIdx) => {
       pipe.results.forEach((res, gIdx) => {
-        // Use unadjusted p-value for browser compute mode because strict FDR on n<10 eliminates everything
-        if (res && Math.abs(res.log2fc) >= currentFc && res.pvalue <= currentPval) {
+        if (res && Math.abs(res.log2fc) >= currentFc && res.padj <= currentPval) {
           const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
           if (binaryMatrix[actualIdx]) {
             binaryMatrix[actualIdx][pIdx] = 1;
@@ -216,7 +215,10 @@ export default function ConsensusPage() {
       </div>
 
       {/* Threshold Controls Bar */}
-      <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '3rem', alignItems: 'center' }}>
+      <motion.div 
+        initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1, duration: 0.6 }}
+        className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '3rem', alignItems: 'center' }}
+      >
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <label style={{ color: '#334155', fontWeight: '600' }}>|log₂FC| Threshold</label>
@@ -256,7 +258,7 @@ export default function ConsensusPage() {
         >
            Re-evaluate
         </button>
-      </div>
+      </motion.div>
 
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '16px' }}>
@@ -267,7 +269,10 @@ export default function ConsensusPage() {
       ) : (
         <>
           {/* Summary Stat Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.6 }}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}
+          >
             <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
               <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Total Consensus DEGs</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#0f172a' }}>{totalDEGs}</div>
@@ -293,7 +298,7 @@ export default function ConsensusPage() {
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#f97316' }}>{sensCount}</div>
               <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem' }}>● Unstable across methods</div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Upregulated / Downregulated Sub-Cards */}
           <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2.5rem' }}>
@@ -328,13 +333,17 @@ export default function ConsensusPage() {
           )}
 
           {/* Interactive Navigation Tabs */}
-          <div className="glass-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '2rem' }}>
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.6 }}
+            className="glass-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '2rem' }}
+          >
             <div style={{ display: 'flex', borderBottom: '1px solid rgba(15, 23, 42, 0.08)', background: 'rgba(241, 245, 249, 0.6)' }}>
               {[
                 { id: 'volcano', label: ' Consensus Volcano Plot' },
                 { id: 'agreement', label: ' Method Agreement & Overlap' },
                 { id: 'deg', label: ' Consensus DEG Table' },
-                { id: 'pipeline', label: ` ${pipelineNames.length}-Pipeline Breakdown` }
+                { id: 'pipeline', label: ` ${pipelineNames.length}-Pipeline Breakdown` },
+                { id: 'validation', label: ' Research Validation' }
               ].map(tab => (
                 <button 
                   key={tab.id} 
@@ -402,7 +411,7 @@ export default function ConsensusPage() {
                             const res = pipe.results.find(r => r && r.gene_index === selectedGene.geneName);
                             // gene_index in downstream is numerical, but geneName was pushed into geneNames array
                             const targetRes = pipe.results.find(r => r && pipelineData.geneNames[r.gene_index] === selectedGene.geneName) || res;
-                            const isSig = targetRes && targetRes.pvalue <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
+                            const isSig = targetRes && targetRes.padj <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
                             return (
                               <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', background: 'rgba(226, 232, 240, 0.5)', borderRadius: '4px' }}>
                                 <span>{name}</span>
@@ -453,7 +462,7 @@ export default function ConsensusPage() {
               {activeTab === 'pipeline' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
                   {pipelineData.pipelines.map((pipe, idx) => {
-                    const sigCount = pipe.results.filter(r => r && Math.abs(r.log2fc) >= parseFloat(fc) && r.pvalue <= parseFloat(pval)).length;
+                    const sigCount = pipe.results.filter(r => r && Math.abs(r.log2fc) >= parseFloat(fc) && r.padj <= parseFloat(pval)).length;
                     return (
                       <div key={idx} className="glass-card" style={{ padding: '1.25rem' }}>
                         <h4 style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
@@ -477,8 +486,87 @@ export default function ConsensusPage() {
                   })}
                 </div>
               )}
+
+              {activeTab === 'validation' && (() => {
+                const knownDEGs = ['CRISPLD2', 'DUSP1', 'TSC22D3', 'FKBP5', 'PER1', 'SERPINA1', 'NFKBIA', 'KLF2', 'ZBTB16'];
+                const significantGenes = consensusResults
+                  .filter(r => r && (r.category === 'high_confidence' || r.category === 'moderate_confidence'))
+                  .map(r => r.geneName.toUpperCase());
+                const sigSet = new Set(significantGenes);
+                const knownSet = new Set(knownDEGs.map(g => g.toUpperCase()));
+                const truePositives = knownDEGs.filter(g => sigSet.has(g.toUpperCase()));
+                const falseNegatives = knownDEGs.filter(g => !sigSet.has(g.toUpperCase()));
+                const recall = knownDEGs.length > 0 ? (truePositives.length / knownDEGs.length * 100).toFixed(1) : 0;
+                
+                return (
+                  <div>
+                    <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #059669' }}>
+                      <h3 style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#059669', marginBottom: '0.75rem' }}>
+                        📄 Validation: Himes et al. 2014 (PMID: 24926665)
+                      </h3>
+                      <p style={{ color: '#334155', marginBottom: '1rem', lineHeight: 1.6 }}>
+                        This demo dataset (GSE52778) is from <strong>airway smooth muscle cells</strong> treated with <strong>dexamethasone (1µM, 18h)</strong>. 
+                        The published study identified <strong>316 DEGs</strong> (BH-adjusted p &lt; 0.05) and highlighted <strong>9 key glucocorticoid-responsive genes</strong>.
+                        Below we cross-reference our consensus results against these known validated DEGs.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                      <div className="glass-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#059669' }}>{truePositives.length}/{knownDEGs.length}</div>
+                        <div style={{ color: '#334155', fontWeight: 600 }}>Known DEGs Recovered</div>
+                        <div style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>Recall: {recall}%</div>
+                      </div>
+                      <div className="glass-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#0284c7' }}>{significantGenes.length}</div>
+                        <div style={{ color: '#334155', fontWeight: 600 }}>Total Consensus DEGs</div>
+                        <div style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>High + Moderate Confidence</div>
+                      </div>
+                      <div className="glass-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#d97706' }}>{falseNegatives.length}</div>
+                        <div style={{ color: '#334155', fontWeight: 600 }}>Known DEGs Missed</div>
+                        <div style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>False Negatives</div>
+                      </div>
+                    </div>
+
+                    <div className="glass-card" style={{ padding: '1.5rem' }}>
+                      <h4 style={{ color: '#334155', fontWeight: 'bold', marginBottom: '1rem' }}>Known Glucocorticoid-Responsive Genes (Himes et al. 2014)</h4>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', color: '#334155' }}>Gene</th>
+                            <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', color: '#334155' }}>Detected?</th>
+                            <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', color: '#334155' }}>Consensus Category</th>
+                            <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', color: '#334155' }}>Median log₂FC</th>
+                            <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', color: '#334155' }}>Pipelines Significant</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {knownDEGs.map(gene => {
+                            const result = consensusResults.find(r => r && r.geneName.toUpperCase() === gene.toUpperCase());
+                            const detected = result && (result.category === 'high_confidence' || result.category === 'moderate_confidence');
+                            return (
+                              <tr key={gene} style={{ borderBottom: '1px solid #f1f5f9', background: detected ? 'rgba(5, 150, 105, 0.05)' : 'rgba(239, 68, 68, 0.03)' }}>
+                                <td style={{ padding: '0.75rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>{gene}</td>
+                                <td style={{ padding: '0.75rem 0.5rem' }}>
+                                  <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 'bold', background: detected ? '#dcfce7' : '#fef2f2', color: detected ? '#166534' : '#991b1b' }}>
+                                    {detected ? '✓ YES' : '✗ NO'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.75rem 0.5rem', color: '#334155' }}>{result ? result.category.replace('_', ' ') : 'not significant'}</td>
+                                <td style={{ padding: '0.75rem 0.5rem', color: '#334155' }}>{result ? result.log2fc_median.toFixed(3) : '—'}</td>
+                                <td style={{ padding: '0.75rem 0.5rem', color: '#334155' }}>{result ? `${result.consensusScore}/${pipelineData.pipelines.length}` : '0/0'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
-          </div>
+          </motion.div>
         </>
       )}
     </motion.div>

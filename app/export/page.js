@@ -122,7 +122,7 @@ export default function ExportPage() {
         const binaryMatrix = Array.from({ length: numGenes }, () => new Array(numPipelines).fill(0));
         pData.pipelines.forEach((pipe, pIdx) => {
           pipe.results.forEach((res, gIdx) => {
-            if (res && Math.abs(res.log2fc) >= userFc && res.pvalue <= userPval) {
+            if (res && Math.abs(res.log2fc) >= userFc && res.padj <= userPval) {
               const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
               if (binaryMatrix[actualIdx]) {
                 binaryMatrix[actualIdx][pIdx] = 1;
@@ -132,16 +132,13 @@ export default function ExportPage() {
         });
         const kappa = computeFleissKappa(binaryMatrix);
 
-        // Build proper GO background universe from ALL genes in annotations + input genes
-        const goUniverseSet = new Set();
-        goAnnotations.forEach(go => go.genes.forEach(g => goUniverseSet.add(g.toUpperCase())));
-        geneNames.forEach(g => goUniverseSet.add(g.toUpperCase()));
-        const goUniverse = Array.from(goUniverseSet);
+        // Background universe = only genes measured in the experiment
+        const experimentUniverse = geneNames;
 
         // Pathways
         const pipelineEnrichments = pData.pipelines.map(pipe => {
-          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= Math.min(userFc, 0.5) && r.pvalue <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
-          return runGOEnrichment(degs, goAnnotations, goUniverse);
+          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= Math.min(userFc, 0.5) && r.padj <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
+          return runGOEnrichment(degs, goAnnotations, experimentUniverse);
         });
         const pathways = computePathwayConsensus(pipelineEnrichments, 0.2);
 

@@ -1,0 +1,23 @@
+{
+  "reference": "Himes et al. 2014 (PMID: 24926665)",
+  "title": "RNA-Seq Transcriptome Profiling Identifies CRISPLD2 as a Glucocorticoid Responsive Gene",
+  "dataset": "GSE52778",
+  "condition": "Dexamethasone 1µM, 18h treatment vs. vehicle control",
+  "total_degs_reported": 316,
+  "significance_criteria": "Benjamini-Hochberg adjusted p-value < 0.05",
+  "known_glucocorticoid_responsive_degs": [
+    "CRISPLD2", "DUSP1", "TSC22D3", "FKBP5", "PER1", "SERPINA1",
+    "NFKBIA", "KLF2", "ZBTB16"
+  ],
+  "expected_upregulated": ["CRISPLD2", "DUSP1", "TSC22D3", "FKBP5", "PER1", "ZBTB16", "NFKBIA", "SERPINA1"],
+  "expected_downregulated": [],
+  "expected_pathways": [
+    "response to glucocorticoid",
+    "cellular response to dexamethasone stimulus",
+    "negative regulation of inflammatory response",
+    "negative regulation of NF-kappaB transcription factor activity",
+    "regulation of circadian rhythm",
+    "regulation of MAP kinase activity"
+  ],
+  "novel_finding": "CRISPLD2 identified as a novel glucocorticoid-responsive gene that modulates cytokine function in airway smooth muscle cells"
+}
