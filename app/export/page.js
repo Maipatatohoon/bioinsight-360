@@ -140,8 +140,9 @@ export default function ExportPage() {
         // Read thresholds set by user on Consensus page
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
+        const userMetric = Storage.getItem('consensusPvalMetric') || (analysisMode === 'downstream' ? 'padj' : 'pvalue');
 
-        consensus = computeConsensus(pData.pipelines, geneNames, userFc, userPval);
+        consensus = computeConsensus(pData.pipelines, geneNames, userFc, userPval, userMetric);
 
         const experimentUniverse = geneNames;
 
@@ -151,10 +152,13 @@ export default function ExportPage() {
         const binaryMatrix = Array.from({ length: numGenes }, () => new Array(numPipelines).fill(0));
         pData.pipelines.forEach((pipe, pIdx) => {
           pipe.results.forEach((res, gIdx) => {
-            if (res && Math.abs(res.log2fc) >= userFc && res.padj <= userPval) {
-              const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
-              if (binaryMatrix[actualIdx]) {
-                binaryMatrix[actualIdx][pIdx] = 1;
+            if (res) {
+              const mVal = userMetric === 'pvalue' ? (res.pvalue !== undefined ? res.pvalue : res.padj) : (res.padj !== undefined ? res.padj : res.pvalue);
+              if (Math.abs(res.log2fc) >= userFc && mVal <= userPval) {
+                const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
+                if (binaryMatrix[actualIdx]) {
+                  binaryMatrix[actualIdx][pIdx] = 1;
+                }
               }
             }
           });
@@ -164,7 +168,14 @@ export default function ExportPage() {
 
         // Pathways
         const pipelineEnrichments = await Promise.all(pData.pipelines.map(async pipe => {
-          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= userFc && r.padj <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
+          const degs = pipe.results
+            .filter(r => {
+              if (!r) return false;
+              const mVal = userMetric === 'pvalue' ? (r.pvalue !== undefined ? r.pvalue : r.padj) : (r.padj !== undefined ? r.padj : r.pvalue);
+              return Math.abs(r.log2fc) >= userFc && mVal <= userPval;
+            })
+            .map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i])
+            .filter(Boolean);
           if (degs.length === 0) return [];
           return await runGProfilerEnrichment(degs, experimentUniverse, 'hsapiens');
         }));

@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
-export default function AgreementHeatmap({ pipelines = [], consensusResults = [], fcThreshold = 1, pThreshold = 0.05 }) {
+export default function AgreementHeatmap({ pipelines = [], consensusResults = [], fcThreshold = 1, pThreshold = 0.05, pMetric = 'auto' }) {
   if (!pipelines || pipelines.length === 0 || !consensusResults || consensusResults.length === 0) {
     return <div className="p-4 text-center text-slate-500">No data available for Agreement Heatmap.</div>;
   }
@@ -13,6 +13,8 @@ export default function AgreementHeatmap({ pipelines = [], consensusResults = []
   const topGenes = consensusResults.slice(0, 50);
   const geneNames = topGenes.map(g => g.geneName).reverse();
   const pipelineNames = pipelines.map(p => p.name);
+  const isDownstream = pipelines.some(p => p.name === 'DESeq2' || p.name === 'edgeR' || p.name === 'limma');
+  const activeMetric = pMetric === 'padj' ? 'padj' : pMetric === 'pvalue' ? 'pvalue' : (isDownstream ? 'padj' : 'pvalue');
 
   // Build a geneName->index map from consensusResults for fast lookup
   const geneToIndex = new Map();
@@ -26,7 +28,8 @@ export default function AgreementHeatmap({ pipelines = [], consensusResults = []
       const pipeline = pipelines.find(p => p.name === pipelineName);
       if (!pipeline || gIdx === undefined) return 0;
       const res = pipeline.results[gIdx];
-      return (res && res.pvalue <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) ? 1 : 0;
+      const metricVal = res ? (activeMetric === 'pvalue' ? (res.pvalue !== undefined ? res.pvalue : res.padj) : (res.padj !== undefined ? res.padj : res.pvalue)) : 1;
+      return (res && metricVal <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) ? 1 : 0;
     });
   });
 

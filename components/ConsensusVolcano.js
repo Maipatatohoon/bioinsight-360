@@ -15,10 +15,12 @@ function getMedianPvalue(pvalues) {
   return med <= 0 ? Number.MIN_VALUE : med;
 }
 
-export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 1, pThreshold = 0.05, onGeneSelect }) {
+export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 1, pThreshold = 0.05, pMetric = 'auto', onGeneSelect }) {
   if (!consensusResults || consensusResults.length === 0) {
     return <div className="p-4 text-center text-slate-500">No data available for Volcano Plot.</div>;
   }
+
+  const isPadj = pMetric === 'padj' || (pMetric === 'auto' && consensusResults[0]?.activeMetric === 'padj');
 
   const traces = [
     { name: 'High Confidence', category: 'high_confidence', color: '#059669' },
@@ -29,8 +31,15 @@ export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 
     const data = consensusResults.filter((g) => g.category === group.category);
     return {
       x: data.map((g) => g.log2fc_median),
-      y: data.map((g) => -Math.log10(Math.max(getMedianPvalue(g.pvalues), 1e-300))),
-      text: data.map((g) => `Gene: ${g.geneName}<br>Score: ${g.consensusScore}<br>Category: ${g.category}<br>Log2FC: ${g.log2fc_median?.toFixed(2)}<br>P-value: ${getMedianPvalue(g.pvalues).toExponential(2)}`),
+      y: data.map((g) => {
+        const vals = isPadj && g.padjs && g.padjs.length > 0 ? g.padjs : g.pvalues;
+        return -Math.log10(Math.max(getMedianPvalue(vals), 1e-300));
+      }),
+      text: data.map((g) => {
+        const vals = isPadj && g.padjs && g.padjs.length > 0 ? g.padjs : g.pvalues;
+        const pLabel = isPadj ? 'FDR' : 'P-value';
+        return `Gene: ${g.geneName}<br>Score: ${g.consensusScore}<br>Category: ${g.category}<br>Log2FC: ${g.log2fc_median?.toFixed(2)}<br>${pLabel}: ${getMedianPvalue(vals).toExponential(2)}`;
+      }),
       mode: 'markers',
       type: 'scatter',
       name: group.name,
@@ -52,7 +61,7 @@ export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 
           plot_bgcolor: 'transparent',
           font: { color: '#0f172a' },
           xaxis: { title: 'Log2 Fold Change', zerolinecolor: '#334155', gridcolor: '#f1f5f9' },
-          yaxis: { title: '-Log10(p-value)', zerolinecolor: '#334155', gridcolor: '#f1f5f9' },
+          yaxis: { title: isPadj ? '-Log10(FDR)' : '-Log10(p-value)', zerolinecolor: '#334155', gridcolor: '#f1f5f9' },
           shapes: [
             { type: 'line', x0: fcThreshold, x1: fcThreshold, y0: 0, y1: 1, yref: 'paper', line: { color: '#1e293b', dash: 'dash' } },
             { type: 'line', x0: -fcThreshold, x1: -fcThreshold, y0: 0, y1: 1, yref: 'paper', line: { color: '#1e293b', dash: 'dash' } },
