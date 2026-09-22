@@ -4,6 +4,7 @@ import { Storage } from '../../lib/storage';
 import { useState, useEffect } from 'react';
 import { runAllPipelines, computeConsensus, computeFleissKappa, formatDownstreamPipelines } from '../../lib/consensus';
 import { runGOEnrichment, computePathwayConsensus } from '../../lib/enrichment';
+import { fetchGOAnnotationsForGenes } from '../../lib/quickgo_annotations';
 
 export default function ExportPage() {
   // Minimal CSV row parser — handles quoted fields
@@ -74,14 +75,6 @@ export default function ExportPage() {
           const header = parseCSVRow(lines[0]);
           sampleNames = header.slice(1);
 
-          const rawMatrix = [];
-          for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            const parts = parseCSVRow(lines[i]);
-            geneNames.push(parts[0]);
-            rawMatrix.push(parts.slice(1).map(Number));
-          }
-
           const metaLines = rawMetaCSV.trim().split('\n');
           const groupMap = {};
           for (let i = 1; i < metaLines.length; i++) {
@@ -90,16 +83,30 @@ export default function ExportPage() {
             groupMap[s] = (g || '').toLowerCase();
           }
 
+          const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
+          const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
+
           sampleNames.forEach((name, idx) => {
             const group = groupMap[name] || (idx % 2 === 0 ? 'control' : 'treated');
-            if (group.includes('control') || group.includes('untreated')) {
+            if (group.toLowerCase() === activeControlGroup.toLowerCase() || group.includes('control') || group.includes('untreated')) {
               controlIndices.push(idx);
             } else {
               treatedIndices.push(idx);
             }
           });
 
-          pData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
+          const cachedData = Storage.getItem('pipelineData');
+          if (cachedData) {
+            try {
+              pData = JSON.parse(cachedData);
+            } catch(e) {
+              console.error('Failed to parse cached pipeline data', e);
+            }
+          }
+          if (!pData) {
+            throw new Error("No cached pipeline data found. Please run the consensus analysis first.");
+          }
+          geneNames = pData.geneNames;
         }
 
         // Read thresholds set by user on Consensus page
@@ -108,13 +115,11 @@ export default function ExportPage() {
 
         consensus = computeConsensus(pData.pipelines, geneNames, userFc, userPval);
 
-        const goRes = await fetch('/data/go_annotations.json');
-        const goJson = await goRes.json();
-        const goAnnotations = Object.entries(goJson.terms).map(([term, data]) => ({
-          term,
-          name: data.name,
-          genes: data.genes || []
-        }));
+        const experimentUniverse = geneNames;
+        const goAnnotations = await fetchGOAnnotationsForGenes(experimentUniverse);
+        if (!goAnnotations || goAnnotations.length === 0) {
+            console.warn("Failed to retrieve GO annotations from EBI QuickGO for the dataset.");
+        }
 
         // Fleiss Kappa
         const numGenes = geneNames.length;
@@ -132,12 +137,10 @@ export default function ExportPage() {
         });
         const kappa = computeFleissKappa(binaryMatrix);
 
-        // Background universe = only genes measured in the experiment
-        const experimentUniverse = geneNames;
 
         // Pathways
         const pipelineEnrichments = pData.pipelines.map(pipe => {
-          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= Math.min(userFc, 0.5) && r.padj <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
+          const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= userFc && r.padj <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
           return runGOEnrichment(degs, goAnnotations, experimentUniverse);
         });
         const pathways = computePathwayConsensus(pipelineEnrichments, 0.2);
@@ -245,12 +248,24 @@ export default function ExportPage() {
     });
   };
 
-  if (loading || !summaryData) {
+  if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', color: '#0f172a' }}>
         <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
         <h2 style={{ color: '#d97706', marginBottom: '0.5rem' }}>Preparing Export Data & Executive Summary...</h2>
         <p style={{ color: '#1e293b' }}>Aggregating 6 pipeline outputs, consensus scores, and pathway stability metrics</p>
+      </div>
+    );
+  }
+
+  if (!summaryData) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', color: '#0f172a', padding: '2rem' }}>
+        <h2 style={{ color: '#dc2626', marginBottom: '1rem' }}>⚠️ Analysis Not Found</h2>
+        <p style={{ color: '#1e293b', marginBottom: '2rem' }}>Please run the consensus analysis first or wait for processing to finish.</p>
+        <button onClick={() => window.location.href='/consensus'} className="btn-primary" style={{ padding: '0.75rem 1.5rem', fontWeight: 'bold' }}>
+          Go to Consensus Dashboard
+        </button>
       </div>
     );
   }

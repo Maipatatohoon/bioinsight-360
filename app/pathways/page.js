@@ -4,9 +4,9 @@ import { Storage } from '../../lib/storage';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import PathwayChart from '../../components/PathwayChart';
-import { runGOEnrichment, computePathwayConsensus } from '../../lib/enrichment';
 import { runAllPipelines, formatDownstreamPipelines } from '../../lib/consensus';
 import { fetchGoTermDetails } from '../../lib/quickgo_api';
+import { fetchGOAnnotationsForGenes } from '../../lib/quickgo_annotations';
 import { motion } from 'framer-motion';
 
 // Minimal CSV row parser — handles quoted fields
@@ -26,6 +26,7 @@ function parseCSVRow(line) {
 export default function PathwaysPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [pathwayConsensus, setPathwayConsensus] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -57,20 +58,9 @@ export default function PathwaysPage() {
     async function loadAndComputePathways() {
       try {
         setLoading(true);
+        setFetchError(null);
         const mode = Storage.getItem('analysisMode') || 'compute';
         let pipelineData;
-        let geneNames = [];
-
-        // Fetch GO annotations
-        const goRes = await fetch('/data/go_annotations.json');
-        const goJson = await goRes.json();
-
-        // Convert GO annotations dictionary to array
-        const goAnnotations = Object.entries(goJson.terms).map(([term, data]) => ({
-          term: term,
-          name: data.name,
-          genes: data.genes || []
-        }));
 
         if (mode === 'downstream') {
           const deseq2 = JSON.parse(Storage.getItem('deseq2Data'));
@@ -78,53 +68,19 @@ export default function PathwaysPage() {
           const limma = JSON.parse(Storage.getItem('limmaData'));
           pipelineData = formatDownstreamPipelines(deseq2, edger, limma);
         } else {
-          // Load counts + metadata from sessionStorage or demo fallback
-          let filteredCSV = Storage.getItem('filteredCounts') || Storage.getItem('rawCounts');
-          let rawMetaCSV = Storage.getItem('rawMetadata');
-
-          if (!filteredCSV || !rawMetaCSV) {
-            router.replace('/qc');
+          const cachedData = Storage.getItem('pipelineData');
+          if (cachedData) {
+            try {
+              pipelineData = JSON.parse(cachedData);
+            } catch(e) {
+              console.error('Failed to parse cached pipeline data', e);
+            }
+          }
+          if (!pipelineData) {
+            console.error("No cached pipeline data found. Redirecting to consensus.");
+            router.replace('/consensus');
             return;
           }
-
-          const lines = filteredCSV.trim().split('\n');
-          const header = parseCSVRow(lines[0]);
-          const sampleNames = header.slice(1);
-
-          const rawMatrix = [];
-          for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            const parts = parseCSVRow(lines[i]);
-            geneNames.push(parts[0]);
-            rawMatrix.push(parts.slice(1).map(Number));
-          }
-
-          const metaLines = rawMetaCSV.trim().split('\n');
-          const groupMap = {};
-          for (let i = 1; i < metaLines.length; i++) {
-            if (!metaLines[i].trim()) continue;
-            const [s, g] = parseCSVRow(metaLines[i]);
-            groupMap[s] = (g || '').toLowerCase();
-          }
-
-          const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
-          const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
-
-          const controlIndices = [];
-          const treatedIndices = [];
-          sampleNames.forEach((name, idx) => {
-            const group = groupMap[name] || '';
-            if (group.toLowerCase() === activeControlGroup.toLowerCase()) {
-              controlIndices.push(idx);
-            } else if (group.toLowerCase() === activeTreatedGroup.toLowerCase()) {
-              treatedIndices.push(idx);
-            }
-          });
-
-          // Yield to browser before blocking
-          await new Promise(resolve => setTimeout(resolve, 10));
-          // Run all 6 pipelines
-          pipelineData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
         }
 
         // Read thresholds set by user on Consensus page (fall back to sensible defaults)
@@ -134,6 +90,13 @@ export default function PathwaysPage() {
         // BUG 6 FIX: Background universe = only genes measured in the experiment
         // Using GO-universe genes inflates N and buries real enrichment signals
         const experimentUniverse = pipelineData.geneNames;
+
+        // Fetch GO annotations dynamically for the experiment universe
+        const goAnnotations = await fetchGOAnnotationsForGenes(experimentUniverse);
+        
+        if (!goAnnotations || goAnnotations.length === 0) {
+            throw new Error("Failed to retrieve GO annotations from EBI QuickGO for the dataset.");
+        }
 
         // Compute DEGs per pipeline using user thresholds
         // BUG 2 FIX: Filter on padj (FDR-corrected) instead of raw pvalue
@@ -153,6 +116,7 @@ export default function PathwaysPage() {
         }
       } catch (err) {
         console.error('Error computing pathway consensus:', err);
+        setFetchError(err.message || "An error occurred while computing pathway consensus.");
       } finally {
         setLoading(false);
       }
@@ -224,7 +188,13 @@ export default function PathwaysPage() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '16px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
           <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
           <h2 style={{ color: '#0284c7', marginBottom: '0.5rem' }}>Computing GO Pathway Consensus...</h2>
-          <p style={{ color: '#1e293b' }}>Evaluating hypergeometric enrichment across 6 pipelines</p>
+          <p style={{ color: '#1e293b' }}>Fetching real-time annotations from EBI QuickGO & evaluating hypergeometric enrichment across pipelines</p>
+        </div>
+      ) : fetchError ? (
+        <div style={{ padding: '3rem', textAlign: 'center', background: 'rgba(254, 226, 226, 0.5)', borderRadius: '12px', border: '1px solid #fca5a5' }}>
+          <h2 style={{ color: '#dc2626', marginBottom: '1rem' }}>⚠️ Computation Failed</h2>
+          <p style={{ color: '#7f1d1d' }}>{fetchError}</p>
+          <button onClick={() => window.location.reload()} className="btn-secondary" style={{ marginTop: '1.5rem', padding: '0.75rem 1.5rem', fontWeight: 'bold' }}>Retry Analysis</button>
         </div>
       ) : (
         <>

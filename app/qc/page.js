@@ -67,10 +67,31 @@ export default function QCPage() {
           worker.terminate();
         };
 
+        let minGroupSize = 2;
+        try {
+          const groupCounts = {};
+          const metaLines = rawMetaCSV.trim().split('\n');
+          for (let i = 1; i < metaLines.length; i++) {
+            if (!metaLines[i].trim()) continue;
+            const parts = metaLines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+            const group = parts[1];
+            if (group && group.toLowerCase() !== 'exclude') {
+              groupCounts[group] = (groupCounts[group] || 0) + 1;
+            }
+          }
+          const counts = Object.values(groupCounts);
+          if (counts.length > 0) {
+            minGroupSize = Math.min(...counts);
+          }
+        } catch (e) {
+          console.error('Error computing minGroupSize', e);
+        }
+
         worker.postMessage({
           rawCountsCSV,
           rawMetaCSV,
-          cpmThreshold: debouncedCpm
+          cpmThreshold: debouncedCpm,
+          minGroupSize
         });
 
       } catch (err) {

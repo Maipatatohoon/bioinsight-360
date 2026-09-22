@@ -241,7 +241,7 @@ function matrixToCSV(matrix, geneNames, sampleNames) {
 }
 
 self.onmessage = function(e) {
-  const { rawCountsCSV, rawMetaCSV, cpmThreshold } = e.data;
+  const { rawCountsCSV, rawMetaCSV, cpmThreshold, minGroupSize } = e.data;
 
   const lines = rawCountsCSV.trim().split('\n');
   const header = parseCSVRow(lines[0]);
@@ -280,7 +280,7 @@ self.onmessage = function(e) {
   }
 
   // 1. Filter
-  const { filteredMatrix, filteredGenes } = filterByCPM(rawMatrix, geneNames, cpmThreshold, 2);
+  const { filteredMatrix, filteredGenes } = filterByCPM(rawMatrix, geneNames, cpmThreshold, minGroupSize || 2);
   const filteredCSV = matrixToCSV(filteredMatrix, filteredGenes, validSampleNames);
 
   // 2. QC metrics on raw matrix

@@ -106,7 +106,29 @@ export default function ConsensusPage() {
 
           // Yield to browser before blocking
           await new Promise(resolve => setTimeout(resolve, 10));
-          pData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
+          
+          // Check if we already computed this exact dataset
+          const cachedData = Storage.getItem('pipelineData');
+          if (cachedData) {
+            try {
+              const parsed = JSON.parse(cachedData);
+              // Basic validation that cache matches current data length
+              if (parsed && parsed.geneNames && parsed.geneNames.length === geneNames.length) {
+                pData = parsed;
+              }
+            } catch(e) {
+              console.warn('Failed to parse cached pipeline data', e);
+            }
+          }
+          
+          if (!pData) {
+            pData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
+            try {
+              Storage.setItem('pipelineData', JSON.stringify(pData));
+            } catch (e) {
+              console.warn('Could not cache pipelineData (might be too large for storage)', e);
+            }
+          }
         }
 
         setPipelineData(pData);
@@ -258,6 +280,22 @@ export default function ConsensusPage() {
         >
            Re-evaluate
         </button>
+      </motion.div>
+
+      {/* Methodology & Limitations Panel */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }}
+        style={{ marginBottom: '2rem', padding: '1rem 1.5rem', background: 'rgba(254, 243, 199, 0.4)', borderLeft: '4px solid #f59e0b', borderRadius: '0 8px 8px 0' }}
+      >
+        <h3 style={{ color: '#b45309', margin: '0 0 0.5rem 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '1.2rem' }}>⚠️</span> Methodology Limitations (Compute Mode)
+        </h3>
+        <p style={{ margin: 0, color: '#78350f', fontSize: '0.9rem', lineHeight: '1.5' }}>
+          This application uses <strong>Welch's t-test</strong> and <strong>Mann-Whitney U tests</strong> on normalized counts (CPM, UQ, MoR). 
+          These browser-based tests <strong>do not model negative binomial overdispersion</strong>, which is inherent in RNA-seq data. 
+          As a result, you may see significantly inflated false positives (more DEGs) compared to rigorous tools like <strong>DESeq2, edgeR, or limma</strong>. 
+          For publication-quality analysis, please run DESeq2 externally and upload the results using "Downstream Mode".
+        </p>
       </motion.div>
 
       {loading ? (

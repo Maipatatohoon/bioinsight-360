@@ -1,7 +1,7 @@
 'use client';
 import { Storage } from '../../lib/storage';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { fetchGeoMetadata } from '../../lib/geo_api';
@@ -33,6 +33,11 @@ export default function UploadPage() {
     const [uniqueGroups, setUniqueGroups] = useState(['Control', 'Treated']);
     const [selectedCtrl, setSelectedCtrl] = useState('Control');
     const [selectedTrt, setSelectedTrt] = useState('Treated');
+
+    useEffect(() => {
+        Storage.setItem('activeControlGroup', selectedCtrl);
+        Storage.setItem('activeTreatedGroup', selectedTrt);
+    }, [selectedCtrl, selectedTrt]);
 
     const handleLoadDemo = async () => {
         setLoading(true);
