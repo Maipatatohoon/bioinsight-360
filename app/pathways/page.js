@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import PathwayChart from '../../components/PathwayChart';
 import { runAllPipelines, formatDownstreamPipelines } from '../../lib/consensus';
 import { fetchGoTermDetails } from '../../lib/quickgo_api';
-import { fetchGOAnnotationsForGenes } from '../../lib/quickgo_annotations';
+import { runGProfilerEnrichment } from '../../lib/gprofiler_api';
+import { computePathwayConsensus } from '../../lib/enrichment';
 import { motion } from 'framer-motion';
 
 // Minimal CSV row parser — handles quoted fields
@@ -33,6 +34,9 @@ export default function PathwaysPage() {
   const [selectedPathway, setSelectedPathway] = useState(null);
   const [selectedPathwayDetails, setSelectedPathwayDetails] = useState(null);
   const [isFetchingDetails, setIsFetchingDetails] = useState(false);
+  
+  // Explicit Organism Handling as requested
+  const [organism, setOrganism] = useState('hsapiens');
 
   useEffect(() => {
     if (!selectedPathway) {
@@ -87,26 +91,21 @@ export default function PathwaysPage() {
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
 
-        // BUG 6 FIX: Background universe = only genes measured in the experiment
-        // Using GO-universe genes inflates N and buries real enrichment signals
+        // Background universe = only genes measured in the experiment
         const experimentUniverse = pipelineData.geneNames;
 
-        // Fetch GO annotations dynamically for the experiment universe
-        const goAnnotations = await fetchGOAnnotationsForGenes(experimentUniverse);
-        
-        if (!goAnnotations || goAnnotations.length === 0) {
-            throw new Error("Failed to retrieve GO annotations from EBI QuickGO for the dataset.");
-        }
+        console.log(`[BioInsight] Explicit organism: ${organism}, Input Genes: ${experimentUniverse.length}`);
 
-        // Compute DEGs per pipeline using user thresholds
-        // BUG 2 FIX: Filter on padj (FDR-corrected) instead of raw pvalue
-        const pipelineEnrichments = pipelineData.pipelines.map(pipe => {
+        // Compute DEGs per pipeline and run g:Profiler for each
+        const pipelineEnrichments = await Promise.all(pipelineData.pipelines.map(async pipe => {
           const degs = pipe.results
             .filter(r => r && Math.abs(r.log2fc) >= userFc && r.padj <= userPval)
             .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
             .filter(Boolean);
-          return runGOEnrichment(degs, goAnnotations, experimentUniverse);
-        });
+          
+          if (degs.length === 0) return [];
+          return await runGProfilerEnrichment(degs, experimentUniverse, organism);
+        }));
 
         // Compute Pathway Consensus — use a more lenient pThreshold for small gene sets
         const consensus = computePathwayConsensus(pipelineEnrichments, 0.2);
@@ -123,7 +122,7 @@ export default function PathwaysPage() {
     }
 
     loadAndComputePathways();
-  }, []);
+  }, [organism]);
 
   const highCount = pathwayConsensus.filter(p => p.category === 'high_confidence').length;
   const modCount = pathwayConsensus.filter(p => p.category === 'moderate_confidence').length;

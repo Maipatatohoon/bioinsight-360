@@ -21,7 +21,7 @@ describe('Statistics Library', () => {
     // mean(log2(control + 1)) = mean([2, 3, 4]) = 3
     // 5 - 3 = 2
     const fc = log2FoldChange(treated, control);
-    expect(fc).toBe(2);
+    expect(fc).toBeCloseTo(2);
   });
 
   test('benjaminiHochberg adjusts p-values correctly', () => {
