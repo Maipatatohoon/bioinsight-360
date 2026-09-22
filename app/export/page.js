@@ -3,8 +3,8 @@ import { Storage } from '../../lib/storage';
 
 import { useState, useEffect } from 'react';
 import { runAllPipelines, computeConsensus, computeFleissKappa, formatDownstreamPipelines } from '../../lib/consensus';
-import { runGOEnrichment, computePathwayConsensus } from '../../lib/enrichment';
-import { fetchGOAnnotationsForGenes } from '../../lib/quickgo_annotations';
+import { computePathwayConsensus } from '../../lib/enrichment';
+import { runGProfilerEnrichment } from '../../lib/gprofiler_api';
 
 export default function ExportPage() {
   // Minimal CSV row parser — handles quoted fields
@@ -116,10 +116,6 @@ export default function ExportPage() {
         consensus = computeConsensus(pData.pipelines, geneNames, userFc, userPval);
 
         const experimentUniverse = geneNames;
-        const goAnnotations = await fetchGOAnnotationsForGenes(experimentUniverse);
-        if (!goAnnotations || goAnnotations.length === 0) {
-            console.warn("Failed to retrieve GO annotations from EBI QuickGO for the dataset.");
-        }
 
         // Fleiss Kappa
         const numGenes = geneNames.length;
@@ -139,10 +135,11 @@ export default function ExportPage() {
 
 
         // Pathways
-        const pipelineEnrichments = pData.pipelines.map(pipe => {
+        const pipelineEnrichments = await Promise.all(pData.pipelines.map(async pipe => {
           const degs = pipe.results.filter(r => r && Math.abs(r.log2fc) >= userFc && r.padj <= userPval).map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i]).filter(Boolean);
-          return runGOEnrichment(degs, goAnnotations, experimentUniverse);
-        });
+          if (degs.length === 0) return [];
+          return await runGProfilerEnrichment(degs, experimentUniverse, 'hsapiens');
+        }));
         const pathways = computePathwayConsensus(pipelineEnrichments, 0.2);
 
         setSummaryData({
