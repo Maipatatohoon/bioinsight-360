@@ -215,10 +215,11 @@ export default function ExportPage() {
 
   const handleDownloadPathways = () => {
     if (!summaryData) return;
-    const headers = ['GO_Term_ID', 'Biological_Process_Name', 'Consensus_Score', 'Pipelines_Enriched', 'Category', 'Median_Adj_PValue', 'Overlapping_Genes'];
+    const headers = ['Term_ID', 'Pathway_Name', 'Source_DB', 'Consensus_Score', 'Pipelines_Enriched', 'Category', 'Median_Adj_PValue', 'Overlapping_Genes'];
     const rows = summaryData.pathways.map(p => [
       p.term,
       `"${p.name}"`,
+      p.source,
       p.consensusScore,
       p.pipelinesEnriched,
       p.category,

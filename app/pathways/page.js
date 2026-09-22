@@ -136,14 +136,15 @@ export default function PathwaysPage() {
   });
 
   const exportPathwaysCSV = () => {
-    const headers = ['GO_Term_ID', 'Biological_Process_Name', 'Consensus_Score', 'Pipelines_Enriched', 'Category', 'Median_Adj_PValue', 'Overlapping_Genes'];
-    const rows = filteredPathways.map(p => [
+    const headers = ['Term_ID', 'Pathway_Name', 'Source_DB', 'Consensus_Score', 'Pipelines_Enriched', 'Category', 'Median_Adj_PValue', 'Overlapping_Genes'];
+    const rows = pathwayConsensus.map(p => [
       p.term,
       `"${p.name}"`,
+      p.source,
       p.consensusScore,
       p.pipelinesEnriched,
       p.category,
-      p.adjPValueMedian.toExponential(4),
+      p.adjPValueMedian != null && !isNaN(p.adjPValueMedian) ? p.adjPValueMedian.toExponential(4) : "NA",
       `"${p.overlappingGenes.join(';')}"`
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -348,8 +349,9 @@ export default function PathwaysPage() {
               <table className="data-table" style={{ width: '100%', fontSize: '0.9rem' }}>
                 <thead>
                   <tr>
-                    <th>GO ID</th>
-                    <th>Biological Process Term</th>
+                    <th>Term ID</th>
+                    <th>Pathway / Process Name</th>
+                    <th style={{ textAlign: 'center' }}>Source DB</th>
                     <th style={{ textAlign: 'center' }}>Pipelines Enriched</th>
                     <th style={{ textAlign: 'center' }}>Consensus Score</th>
                     <th style={{ textAlign: 'center' }}>Category</th>
@@ -373,6 +375,11 @@ export default function PathwaysPage() {
                       >
                         <td style={{ color: '#0284c7', fontWeight: 'bold' }}>{row.term}</td>
                         <td style={{ fontWeight: '600', color: '#0f172a' }}>{row.name}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ padding: '0.2rem 0.5rem', background: '#e2e8f0', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                            {row.source}
+                          </span>
+                        </td>
                         <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{row.pipelinesEnriched}</td>
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
