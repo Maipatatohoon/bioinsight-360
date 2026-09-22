@@ -7,17 +7,122 @@ import Papa from 'papaparse';
 import { fetchGeoMetadata } from '../../lib/geo_api';
 import { motion } from 'framer-motion';
 
+export function processCountMatrix(rawText) {
+    if (!rawText || !rawText.trim()) {
+        throw new Error("Count matrix file is empty.");
+    }
+    let text = rawText.trim();
+
+    // Extract GEO Series Matrix Table if present
+    if (text.includes('!series_matrix_table_begin')) {
+        const beginIdx = text.indexOf('!series_matrix_table_begin');
+        let tableText = text.substring(beginIdx + '!series_matrix_table_begin'.length);
+        if (tableText.includes('!series_matrix_table_end')) {
+            tableText = tableText.substring(0, tableText.indexOf('!series_matrix_table_end'));
+        }
+        text = tableText.trim();
+    }
+
+    const firstLineEnd = text.indexOf('\n');
+    const firstLine = firstLineEnd === -1 ? text : text.substring(0, firstLineEnd);
+
+    // Detect delimiter
+    let delim = ',';
+    if (firstLine.includes('\t')) delim = '\t';
+    else if (firstLine.includes(';') && !firstLine.includes(',')) delim = ';';
+
+    // Handle missing top-left header for row names (common R write.csv / write.table)
+    if (text.startsWith(',') || text.startsWith('\t') || text.startsWith(';')) {
+        text = 'Gene' + text;
+    } else {
+        const preview = Papa.parse(text.split('\n').slice(0, 3).join('\n'), { skipEmptyLines: true, delimiter: delim });
+        if (preview.data && preview.data.length >= 2) {
+            if (preview.data[0].length === preview.data[1].length - 1) {
+                text = 'Gene' + delim + text;
+            }
+        }
+    }
+
+    let parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter: delim });
+    if (!parsed.data || parsed.data.length === 0) {
+        throw new Error("Could not parse file or file is empty.");
+    }
+
+    // Fallback: If only 1 column was detected, the file might be space-aligned
+    if (Object.keys(parsed.data[0] || {}).length === 1 && !firstLine.includes(',')) {
+        const spaceNormalized = text.replace(/[ \t]+/g, '\t');
+        const parsedSpace = Papa.parse(spaceNormalized, { header: true, skipEmptyLines: true, delimiter: '\t' });
+        if (parsedSpace.data && parsedSpace.data.length > 0 && Object.keys(parsedSpace.data[0] || {}).length > 1) {
+            parsed = parsedSpace;
+        }
+    }
+
+    const firstRow = parsed.data[0] || {};
+    const allCols = Object.keys(firstRow);
+    if (allCols.length === 0) {
+        throw new Error("No columns detected in count matrix.");
+    }
+
+    // Annotation columns common in featureCounts/HTSeq/STAR output — never sample count columns
+    const ANNOTATION_COLS = new Set([
+        'chr', 'chrom', 'chromosome', 'start', 'end', 'strand', 'length', 'width',
+        'biotype', 'gene_biotype', 'gene_type', 'exon_id', 'protein_id', 'havana_gene',
+        'havana_transcript', 'description', 'source', 'feature', 'score', 'frame',
+        'attribute', 'class_code', 'nearest_ref', 'link'
+    ]);
+
+    // Robust gene column detection:
+    // Matches 'gene', 'symbol', 'gene_name', 'id', 'probe', 'ensembl', empty string "", or "x"
+    const GENE_ID_REGEX = /^(gene|gene_?id|gene_?name|symbol|gene_?symbol|id|probe|probeset|ensembl|ensembl_?id|target_?id|name)$/i;
+    let geneColKey = allCols.find(k => {
+        const kl = k.toLowerCase().trim();
+        return GENE_ID_REGEX.test(kl) || kl === '' || kl === 'x';
+    });
+
+    if (!geneColKey && allCols.length > 0) {
+        geneColKey = allCols[0];
+    }
+
+    // Sample columns are all remaining columns that are not the gene column, not annotations, not empty
+    const sampleCols = allCols.filter(k => {
+        if (k === geneColKey) return false;
+        const kl = k.toLowerCase().trim();
+        return kl !== '' && !ANNOTATION_COLS.has(kl);
+    });
+
+    if (sampleCols.length === 0) {
+        throw new Error("No sample columns detected in count matrix.");
+    }
+
+    // Clean data: ensure 'Gene' is the first key and preserve original gene identifiers
+    const cleanData = parsed.data.map((row, rowIdx) => {
+        const newRow = {};
+        const rawGene = row[geneColKey];
+        const geneVal = (rawGene !== undefined && rawGene !== null && String(rawGene).trim() !== '')
+            ? String(rawGene).trim()
+            : `Gene_${rowIdx + 1}`;
+        newRow['Gene'] = geneVal;
+        sampleCols.forEach(col => {
+            const val = Number(row[col]);
+            newRow[col] = !isNaN(val) ? val : (row[col] ?? 0);
+        });
+        return newRow;
+    });
+
+    return { cleanData, sampleCols };
+}
+
 export default function UploadPage() {
     const router = useRouter();
     const [summary, setSummary] = useState(null);
     const [metaAssignments, setMetaAssignments] = useState([]);
     const [loading, setLoading] = useState(false);
-    
+
     // Tab State
     const [activeTab, setActiveTab] = useState('local'); // 'local', 'geo', or 'deg'
     const [degSummary, setDegSummary] = useState(null);
     const [uploadedTools, setUploadedTools] = useState({ deseq2: false, edger: false, limma: false });
-    
+
     // GEO State
     const [geoAccession, setGeoAccession] = useState('GSE158055');
     const [geoData, setGeoData] = useState(null);
@@ -28,7 +133,7 @@ export default function UploadPage() {
     const [autoCtrl, setAutoCtrl] = useState('control');
     const [autoTrt, setAutoTrt] = useState('treated');
     const [autoFilter, setAutoFilter] = useState('');
-    
+
     // Group Selection State
     const [uniqueGroups, setUniqueGroups] = useState(['Control', 'Treated']);
     const [selectedCtrl, setSelectedCtrl] = useState('Control');
@@ -44,58 +149,82 @@ export default function UploadPage() {
         try {
             const countsRes = await fetch('/data/demo_counts.csv');
             const metadataRes = await fetch('/data/demo_metadata.csv');
-            
+
             if (countsRes.ok && metadataRes.ok) {
                 const countsText = await countsRes.text();
                 const metaText = await metadataRes.text();
-                
-                const parsedCounts = Papa.parse(countsText, { header: true, skipEmptyLines: true });
+
+                const { cleanData, sampleCols } = processCountMatrix(countsText);
                 const parsedMeta = Papa.parse(metaText, { header: true, skipEmptyLines: true });
-                
-                const sampleCols = Object.keys(parsedCounts.data[0] || {}).filter(k => k.toLowerCase() !== 'gene' && k.toLowerCase() !== 'id');
-                // Handle case-insensitive column names (demo uses 'group', some use 'Group')
-                const getGroup = (d) => d.Group || d.group || d.condition || d.Condition || '';
-                const ctrlCount = parsedMeta.data.filter(d => getGroup(d).toLowerCase().includes('control')).length;
-                const trtCount = parsedMeta.data.filter(d => !getGroup(d).toLowerCase().includes('control') && getGroup(d).trim() !== '').length;
-                
-                const uGroups = Array.from(new Set(parsedMeta.data.map(d => getGroup(d)).filter(Boolean)));
+
+                // Canonicalize metadata to { Sample, Group }
+                const normalizedMeta = parsedMeta.data.map((d, i) => {
+                    const sample = d.Sample || d.sample || d.ID || d.id || d.Name || d.name || sampleCols[i] || `Sample_${i+1}`;
+                    const group = d.Group || d.group || d.condition || d.Condition || 'Control';
+                    return {
+                        Sample: String(sample).trim(),
+                        Group: String(group).trim()
+                    };
+                });
+
+                const uGroups = Array.from(new Set(normalizedMeta.map(d => d.Group).filter(Boolean)));
                 setUniqueGroups([...uGroups, 'Exclude']);
-                if (uGroups.length > 0) setSelectedCtrl(uGroups.find(g => g.toLowerCase().includes('control')) || uGroups[0]);
-                if (uGroups.length > 1) setSelectedTrt(uGroups.find(g => !g.toLowerCase().includes('control')) || uGroups[1]);
-                
+
+                const ctrl = uGroups.find(g => /control|ctrl|untreated|baseline|vehicle|wt/i.test(g)) || uGroups[0] || 'Control';
+                const trt = uGroups.find(g => g !== ctrl && !/exclude/i.test(g)) || uGroups[1] || 'Treated';
+
+                setSelectedCtrl(ctrl);
+                setSelectedTrt(trt);
+                Storage.setItem('activeControlGroup', ctrl);
+                Storage.setItem('activeTreatedGroup', trt);
+
+                const ctrlCount = normalizedMeta.filter(d => d.Group.toLowerCase() === ctrl.toLowerCase()).length;
+                const trtCount = normalizedMeta.filter(d => d.Group.toLowerCase() === trt.toLowerCase()).length;
+
                 setSummary({
-                    genes: parsedCounts.data.length,
+                    genes: cleanData.length,
                     samples: sampleCols,
                     controlCount: ctrlCount,
                     treatedCount: trtCount
                 });
-                
-                
-                Storage.setItem('rawCounts', Papa.unparse(parsedCounts.data));
-                Storage.setItem('rawMetadata', Papa.unparse(parsedMeta.data));
-                setMetaAssignments(parsedMeta.data);
+
+                const cleanCSV = Papa.unparse(cleanData);
+                Storage.setItem('rawCounts', cleanCSV);
+                Storage.setItem('rawMetadata', Papa.unparse(normalizedMeta));
+                Storage.setItem('metaData', JSON.stringify(normalizedMeta));
+                setMetaAssignments(normalizedMeta);
                 Storage.setItem('analysisMode', 'compute');
+
                 // Clear stale artifacts from previous runs
                 Storage.removeItem('filteredCounts');
+                Storage.removeItem('pipelineData');
                 Storage.removeItem('deseq2Data');
                 Storage.removeItem('edgerData');
                 Storage.removeItem('limmaData');
                 setDegSummary(null);
             } else {
                 // Mock fallback if files are not present
+                const mockSamples = Array.from({length: 12}, (_, i) => `Sample_${i+1}`);
+                const mock = mockSamples.map((s, i) => ({
+                    Sample: s,
+                    Group: i < 6 ? 'Control' : 'Treated'
+                }));
+                const mockCounts = [{Gene: 'GENE1'}];
+                mockSamples.forEach(s => { mockCounts[0][s] = 10; });
+
                 setSummary({
                     genes: 15000,
-                    samples: Array.from({length: 12}, (_, i) => `Sample_${i+1}`),
+                    samples: mockSamples,
                     controlCount: 6,
                     treatedCount: 6
                 });
-                const mock = [{Sample: 'Sample_1', Group: 'Control'}];
-                const mockCounts = [{Gene: 'GENE1', Sample_1: 10}];
                 Storage.setItem('rawCounts', Papa.unparse(mockCounts));
                 Storage.setItem('rawMetadata', Papa.unparse(mock));
+                Storage.setItem('metaData', JSON.stringify(mock));
                 setMetaAssignments(mock);
                 Storage.setItem('analysisMode', 'compute');
                 Storage.removeItem('filteredCounts');
+                Storage.removeItem('pipelineData');
                 setDegSummary(null);
             }
         } catch (e) {
@@ -207,78 +336,9 @@ export default function UploadPage() {
                 text = await response.text();
             }
 
-            // Extract GEO Series Matrix Table if present
-            if (text.includes('!series_matrix_table_begin')) {
-                const beginIdx = text.indexOf('!series_matrix_table_begin');
-                let tableText = text.substring(beginIdx + '!series_matrix_table_begin'.length);
-                if (tableText.includes('!series_matrix_table_end')) {
-                    tableText = tableText.substring(0, tableText.indexOf('!series_matrix_table_end'));
-                }
-                text = tableText.trim();
-            }
+            const { cleanData, sampleCols } = processCountMatrix(text);
 
-            // Pre-process text to fix common R write.table output issue (missing top-left header for row names)
-            const fixMissingHeader = (rawText) => {
-                const normalizedForCount = rawText.trim().replace(/[ \t]+/g, '\t');
-                const previewParse = Papa.parse(normalizedForCount.split('\n').slice(0, 2).join('\n'), { delimiter: '\t' });
-                if (previewParse.data && previewParse.data.length >= 2) {
-                    if (previewParse.data[0].length === previewParse.data[1].length - 1) {
-                        const firstLine = rawText.substring(0, rawText.indexOf('\n'));
-                        let delim = ',';
-                        if (firstLine.includes('\t')) delim = '\t';
-                        else if (firstLine.includes(' ')) delim = ' ';
-                        return 'Gene' + delim + rawText;
-                    }
-                }
-                return rawText;
-            };
-
-            text = fixMissingHeader(text);
-
-            // Parse with PapaParse
-            let parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-            
-            if (!parsed.data || parsed.data.length === 0) {
-                throw new Error("Could not parse file or file is empty.");
-            }
-
-            // Fallback: If only 1 column was detected, the file might be space-aligned
-            if (Object.keys(parsed.data[0]).length === 1) {
-                const spaceNormalized = text.replace(/[ \t]+/g, '\t');
-                const parsedSpace = Papa.parse(spaceNormalized, { header: true, skipEmptyLines: true });
-                if (parsedSpace.data && parsedSpace.data.length > 0 && Object.keys(parsedSpace.data[0]).length > 1) {
-                    parsed = parsedSpace;
-                }
-            }
-
-            const firstRow = parsed.data[0] || {};
-
-            // Annotation columns common in featureCounts/HTSeq/STAR output — never sample columns
-            const ANNOTATION_COLS = new Set(['chr','chrom','chromosome','start','end','strand','length',
-              'width','biotype','gene_biotype','gene_type','gene_name','gene_id','transcript_id',
-              'transcript_name','exon_id','protein_id','havana_gene','havana_transcript','description',
-              'source','feature','score','frame','attribute','class_code','nearest_ref','link','x']);
-            const sampleCols = Object.keys(firstRow).filter(k => {
-              const kl = k.toLowerCase().trim();
-              return kl !== '' && !ANNOTATION_COLS.has(kl) &&
-                !kl.includes('gene') && !kl.includes('_id') && kl !== 'x';
-            });
-
-            // Clean parsed data: remove empty keys and ensure 'Gene' is the first key
-            const cleanData = parsed.data.map(row => {
-                const newRow = {};
-                // Find the gene column (the one we didn't classify as a sample, usually first)
-                const geneKey = Object.keys(row).find(k => k.trim() !== '' && !sampleCols.includes(k));
-                newRow['Gene'] = geneKey ? row[geneKey] : `Gene_${Math.random().toString(36).substr(2,5)}`;
-                
-                sampleCols.forEach(col => {
-                    newRow[col] = row[col];
-                });
-                return newRow;
-            });
-            
-            // Generate mock metadata by blindly splitting samples into two groups
-            // In a real app, we'd parse the geo_metadata for sample groups if possible
+            // Generate mock metadata by splitting samples into two groups
             const mockMeta = sampleCols.map((s, i) => ({
                 Sample: s,
                 Group: i < Math.floor(sampleCols.length / 2) ? 'Control' : 'Treated'
@@ -286,6 +346,12 @@ export default function UploadPage() {
 
             const ctrlCount = mockMeta.filter(d => d.Group === 'Control').length;
             const trtCount = mockMeta.filter(d => d.Group === 'Treated').length;
+
+            setUniqueGroups(['Control', 'Treated', 'Exclude']);
+            setSelectedCtrl('Control');
+            setSelectedTrt('Treated');
+            Storage.setItem('activeControlGroup', 'Control');
+            Storage.setItem('activeTreatedGroup', 'Treated');
 
             setSummary({
                 genes: cleanData.length,
@@ -295,15 +361,17 @@ export default function UploadPage() {
             });
 
             setMetaAssignments(mockMeta);
-            
+
             // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
             const cleanCSV = Papa.unparse(cleanData);
             Storage.setItem('rawCounts', cleanCSV);
             Storage.setItem('rawMetadata', Papa.unparse(mockMeta));
+            Storage.setItem('metaData', JSON.stringify(mockMeta));
 
             Storage.setItem('analysisMode', 'compute');
             // Clear stale artifacts from previous runs
             Storage.removeItem('filteredCounts');
+            Storage.removeItem('pipelineData');
             Storage.removeItem('deseq2Data');
             Storage.removeItem('edgerData');
             Storage.removeItem('limmaData');
@@ -411,76 +479,18 @@ export default function UploadPage() {
                                             text = await file.text();
                                         }
 
-                                        // Extract GEO Series Matrix Table if present
-                                        if (text.includes('!series_matrix_table_begin')) {
-                                            const beginIdx = text.indexOf('!series_matrix_table_begin');
-                                            let tableText = text.substring(beginIdx + '!series_matrix_table_begin'.length);
-                                            if (tableText.includes('!series_matrix_table_end')) {
-                                                tableText = tableText.substring(0, tableText.indexOf('!series_matrix_table_end'));
-                                            }
-                                            text = tableText.trim();
-                                        }
-
-                                        const fixMissingHeader = (rawText) => {
-                                            const normalizedForCount = rawText.trim().replace(/[ \t]+/g, '\t');
-                                            const previewParse = Papa.parse(normalizedForCount.split('\n').slice(0, 2).join('\n'), { delimiter: '\t' });
-                                            if (previewParse.data && previewParse.data.length >= 2) {
-                                                if (previewParse.data[0].length === previewParse.data[1].length - 1) {
-                                                    const firstLine = rawText.substring(0, rawText.indexOf('\n'));
-                                                    let delim = ',';
-                                                    if (firstLine.includes('\t')) delim = '\t';
-                                                    else if (firstLine.includes(' ')) delim = ' ';
-                                                    return 'Gene' + delim + rawText;
-                                                }
-                                            }
-                                            return rawText;
-                                        };
-                            
-                                        text = fixMissingHeader(text);
-
-                                        let parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-                                        
-                                        if (!parsed.data || parsed.data.length === 0) {
-                                            throw new Error("Empty file. First 100 chars: " + text.substring(0, 100));
-                                        }
-                                        
-                                        // Fallback: If only 1 column was detected, the file might be space-aligned
-                                        if (Object.keys(parsed.data[0]).length === 1) {
-                                            const spaceNormalized = text.replace(/[ \t]+/g, '\t');
-                                            const parsedSpace = Papa.parse(spaceNormalized, { header: true, skipEmptyLines: true });
-                                            if (parsedSpace.data && parsedSpace.data.length > 0 && Object.keys(parsedSpace.data[0]).length > 1) {
-                                                parsed = parsedSpace;
-                                            }
-                                        }
-                                        
-                                        // Annotation columns common in featureCounts/HTSeq/STAR output — never sample columns
-                                        const ANNOTATION_COLS = new Set(['chr','chrom','chromosome','start','end','strand','length',
-                                          'width','biotype','gene_biotype','gene_type','gene_name','gene_id','transcript_id',
-                                          'transcript_name','exon_id','protein_id','havana_gene','havana_transcript','description',
-                                          'source','feature','score','frame','attribute','class_code','nearest_ref','link','x']);
-                                        const sampleCols = Object.keys(parsed.data[0] || {}).filter(k => {
-                                          const kl = k.toLowerCase().trim();
-                                          return kl !== '' && !ANNOTATION_COLS.has(kl) &&
-                                            !kl.includes('gene') && !kl.includes('_id') && kl !== 'x';
-                                        });
-                                        
-                                        // Clean parsed data: remove empty keys and ensure 'Gene' is the first key
-                                        const cleanData = parsed.data.map(row => {
-                                            const newRow = {};
-                                            // Find the gene column (the one we didn't classify as a sample, usually first)
-                                            const geneKey = Object.keys(row).find(k => k.trim() !== '' && !sampleCols.includes(k));
-                                            newRow['Gene'] = geneKey ? row[geneKey] : `Gene_${Math.random().toString(36).substr(2,5)}`;
-                                            
-                                            sampleCols.forEach(col => {
-                                                newRow[col] = row[col];
-                                            });
-                                            return newRow;
-                                        });
+                                        const { cleanData, sampleCols } = processCountMatrix(text);
 
                                         const mockMeta = sampleCols.map((s, i) => ({
                                             Sample: s,
                                             Group: i < Math.floor(sampleCols.length / 2) ? 'Control' : 'Treated'
                                         }));
+
+                                        setUniqueGroups(['Control', 'Treated', 'Exclude']);
+                                        setSelectedCtrl('Control');
+                                        setSelectedTrt('Treated');
+                                        Storage.setItem('activeControlGroup', 'Control');
+                                        Storage.setItem('activeTreatedGroup', 'Treated');
 
                                         setSummary({
                                             genes: cleanData.length,
@@ -490,15 +500,21 @@ export default function UploadPage() {
                                         });
 
                                         setMetaAssignments(mockMeta);
-                                        
+
                                         // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
                                         const cleanCSV = Papa.unparse(cleanData);
                                         Storage.setItem('rawCounts', cleanCSV);
                                         Storage.setItem('rawMetadata', Papa.unparse(mockMeta));
-                                        
+                                        Storage.setItem('metaData', JSON.stringify(mockMeta));
+
                                         Storage.setItem('analysisMode', 'compute');
                                         // Clear stale artifacts from previous runs
                                         Storage.removeItem('filteredCounts');
+                                        Storage.removeItem('pipelineData');
+                                        Storage.removeItem('deseq2Data');
+                                        Storage.removeItem('edgerData');
+                                        Storage.removeItem('limmaData');
+                                        setDegSummary(null);
                                         Storage.removeItem('deseq2Data');
                                         Storage.removeItem('edgerData');
                                         Storage.removeItem('limmaData');
@@ -675,13 +691,13 @@ export default function UploadPage() {
                 {summary && (
                     <div style={{ marginTop: '3rem', animation: 'fadeIn 0.5s ease-in' }}>
                         <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', color: '#0f172a' }}>Data Summary</h3>
-                        
+
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
                             {[
                                 ['Total Genes', summary.genes],
                                 ['Total Samples', summary.samples.length],
-                                ['Control Group', summary.controlCount],
-                                ['Treated Group', summary.treatedCount]
+                                [`Control (${selectedCtrl})`, summary.controlCount],
+                                [`Treated (${selectedTrt})`, summary.treatedCount]
                             ].map(([label, val]) => (
                                 <div key={label} style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
                                     <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 500 }}>{label}</div>
@@ -689,7 +705,7 @@ export default function UploadPage() {
                                 </div>
                             ))}
                         </div>
-                        
+
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                             <div>
                                 <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
@@ -706,35 +722,56 @@ export default function UploadPage() {
                                         try {
                                             const text = await file.text();
                                             let delim = ',';
-                                            if (text.substring(0, text.indexOf('\n')).includes('\t')) delim = '\t';
+                                            const firstLine = text.substring(0, text.indexOf('\n'));
+                                            if (firstLine.includes('\t')) delim = '\t';
+                                            else if (firstLine.includes(';') && !firstLine.includes(',')) delim = ';';
                                             const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter: delim });
-                                            
-                                            // Assume first column is sample name, second is group
+
+                                            // Detect sample and group column headers
+                                            const headers = Object.keys(parsed.data[0] || {});
+                                            const sampleHeader = headers.find(h => /^(sample|sample_?id|sample_?name|id|name)$/i.test(h.trim())) || headers[0];
+                                            const groupHeader = headers.find(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h.trim())) || (headers.length > 1 ? headers[1] : null);
+
                                             const metaObj = {};
                                             parsed.data.forEach(row => {
-                                                const keys = Object.keys(row);
-                                                if (keys.length >= 2) {
-                                                    const sample = row[keys[0]];
-                                                    const group = row[keys[1]];
-                                                    metaObj[sample] = group;
+                                                const sample = row[sampleHeader];
+                                                const group = groupHeader ? row[groupHeader] : row[Object.keys(row)[1]];
+                                                if (sample !== undefined && sample !== null && String(sample).trim() !== '') {
+                                                    metaObj[String(sample).trim()] = group !== undefined && group !== null ? String(group).trim() : 'Control';
                                                 }
                                             });
-                                            
+
                                             const updated = metaAssignments.map(m => {
-                                                const sName = (m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '');
-                                                // case-insensitive match for sample names if exact match fails
-                                                const matchKey = Object.keys(metaObj).find(k => k === sName) || Object.keys(metaObj).find(k => k.toLowerCase() === sName.toLowerCase());
-                                                return { ...m, Group: matchKey ? metaObj[matchKey] : 'Exclude' };
+                                                const sName = String(m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').trim();
+                                                const matchKey = Object.keys(metaObj).find(k => k === sName) ||
+                                                                 Object.keys(metaObj).find(k => k.toLowerCase() === sName.toLowerCase());
+                                                return {
+                                                    Sample: sName,
+                                                    Group: matchKey ? metaObj[matchKey] : 'Exclude'
+                                                };
                                             });
-                                            
-                                            const uGroups = Array.from(new Set(updated.map(d => d.Group).filter(Boolean)));
-                                            setUniqueGroups([...uGroups, 'Exclude']);
-                                            if (uGroups.length > 0) setSelectedCtrl(uGroups.find(g => g.toLowerCase().includes('control')) || uGroups[0]);
-                                            if (uGroups.length > 1) setSelectedTrt(uGroups.find(g => !g.toLowerCase().includes('control')) || uGroups[1]);
-                                            
+
+                                            const assignedGroups = Array.from(new Set(updated.map(d => d.Group).filter(g => g && g !== 'Exclude')));
+                                            const allUnique = Array.from(new Set([...assignedGroups, 'Exclude']));
+                                            setUniqueGroups(allUnique);
+
+                                            const ctrl = assignedGroups.find(g => /control|ctrl|untreated|baseline|vehicle|wt/i.test(g)) || assignedGroups[0] || 'Control';
+                                            const trt = assignedGroups.find(g => g !== ctrl && !/exclude/i.test(g)) || assignedGroups[1] || 'Treated';
+
+                                            setSelectedCtrl(ctrl);
+                                            setSelectedTrt(trt);
+                                            Storage.setItem('activeControlGroup', ctrl);
+                                            Storage.setItem('activeTreatedGroup', trt);
+
                                             setMetaAssignments(updated);
                                             Storage.setItem('metaData', JSON.stringify(updated));
                                             Storage.setItem('rawMetadata', Papa.unparse(updated));
+
+                                            setSummary(prev => prev ? ({
+                                                ...prev,
+                                                controlCount: updated.filter(ma => ma.Group.toLowerCase() === ctrl.toLowerCase()).length,
+                                                treatedCount: updated.filter(ma => ma.Group.toLowerCase() === trt.toLowerCase()).length
+                                            }) : null);
                                         } catch (err) {
                                             alert("Failed to parse metadata file: " + err.message);
                                         }
@@ -747,44 +784,56 @@ export default function UploadPage() {
                                 <input type="text" value={autoFilter} onChange={(e) => setAutoFilter(e.target.value)} placeholder="Required (e.g. Oocyte)" style={{ width: '130px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} title="If set, samples lacking this word are Excluded." />
                                 <button onClick={() => {
                                     const updated = metaAssignments.map(m => {
-                                        const sName = (m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').toLowerCase();
+                                        const sName = String(m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').trim();
                                         const sMeta = Object.values(m).join(' ').toLowerCase();
-                                        const searchTarget = sName + ' ' + sMeta;
-                                        
-                                        if (autoFilter && !searchTarget.includes(autoFilter.toLowerCase())) return { ...m, Group: 'Exclude' };
-                                        if (autoCtrl && searchTarget.includes(autoCtrl.toLowerCase())) return { ...m, Group: 'Control' };
-                                        if (autoTrt && searchTarget.includes(autoTrt.toLowerCase())) return { ...m, Group: 'Treated' };
-                                        return { ...m, Group: 'Exclude' };
+                                        const searchTarget = sName.toLowerCase() + ' ' + sMeta;
+
+                                        let newGrp = 'Exclude';
+                                        if (autoFilter && !searchTarget.includes(autoFilter.toLowerCase())) {
+                                            newGrp = 'Exclude';
+                                        } else if (autoCtrl && searchTarget.includes(autoCtrl.toLowerCase())) {
+                                            newGrp = selectedCtrl;
+                                        } else if (autoTrt && searchTarget.includes(autoTrt.toLowerCase())) {
+                                            newGrp = selectedTrt;
+                                        }
+                                        return { Sample: sName, Group: newGrp };
                                     });
                                     setMetaAssignments(updated);
                                     Storage.setItem('metaData', JSON.stringify(updated));
                                     Storage.setItem('rawMetadata', Papa.unparse(updated));
-                                    setSummary(prev => ({
+                                    setSummary(prev => prev ? ({
                                         ...prev,
-                                        controlCount: updated.filter(ma => ma.Group === 'Control').length,
-                                        treatedCount: updated.filter(ma => ma.Group === 'Treated').length
-                                    }));
+                                        controlCount: updated.filter(ma => ma.Group.toLowerCase() === selectedCtrl.toLowerCase()).length,
+                                        treatedCount: updated.filter(ma => ma.Group.toLowerCase() === selectedTrt.toLowerCase()).length
+                                    }) : null);
                                 }} style={{ padding: '0.3rem 0.6rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Auto-Assign</button>
                             </div>
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
                             {metaAssignments.map((m, idx) => {
                                 const sampleName = m.Sample || m.sample || m.ID || m.id || m.Name || m.name || `Sample_${idx}`;
+                                const currentGroup = m.Group || m.group || 'Control';
                                 return (
                                 <div key={sampleName} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                                    <span style={{ fontWeight: 500, color: m.Group === 'Exclude' ? '#94a3b8' : '#0f172a' }}>{sampleName}</span>
-                                    <select 
-                                        style={{ background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '0.3rem 0.5rem' }} 
-                                        value={m.Group}
+                                    <span style={{ fontWeight: 500, color: currentGroup === 'Exclude' ? '#94a3b8' : '#0f172a' }}>{sampleName}</span>
+                                    <select
+                                        style={{ background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '0.3rem 0.5rem' }}
+                                        value={currentGroup}
                                         onChange={(e) => {
                                             const newGroup = e.target.value;
                                             const updated = metaAssignments.map(ma => {
                                                 const maName = ma.Sample || ma.sample || ma.ID || ma.id || ma.Name || ma.name;
-                                                return maName === sampleName ? { ...ma, Group: newGroup } : ma;
+                                                return maName === sampleName ? { Sample: maName, Group: newGroup } : { Sample: ma.Sample || maName, Group: ma.Group || ma.group };
                                             });
                                             setMetaAssignments(updated);
                                             Storage.setItem('metaData', JSON.stringify(updated));
                                             Storage.setItem('rawMetadata', Papa.unparse(updated));
+
+                                            setSummary(prev => prev ? ({
+                                                ...prev,
+                                                controlCount: updated.filter(ma => ma.Group.toLowerCase() === selectedCtrl.toLowerCase()).length,
+                                                treatedCount: updated.filter(ma => ma.Group.toLowerCase() === selectedTrt.toLowerCase()).length
+                                            }) : null);
                                         }}
                                     >
                                         {Array.from(new Set([...uniqueGroups, 'Control', 'Treated', 'Exclude'])).map(g => (
@@ -801,13 +850,37 @@ export default function UploadPage() {
                                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                     <label style={{ fontSize: '0.9rem', color: '#475569' }}>
                                         <strong>Control Group: </strong>
-                                        <select value={selectedCtrl} onChange={e => setSelectedCtrl(e.target.value)} style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                        <select
+                                            value={selectedCtrl}
+                                            onChange={e => {
+                                                const newCtrl = e.target.value;
+                                                setSelectedCtrl(newCtrl);
+                                                setSummary(prev => prev ? ({
+                                                    ...prev,
+                                                    controlCount: metaAssignments.filter(ma => (ma.Group || ma.group || '').toLowerCase() === newCtrl.toLowerCase()).length,
+                                                    treatedCount: metaAssignments.filter(ma => (ma.Group || ma.group || '').toLowerCase() === selectedTrt.toLowerCase()).length
+                                                }) : null);
+                                            }}
+                                            style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        >
                                             {Array.from(new Set([...uniqueGroups, 'Control', 'Treated'])).map(g => <option key={g} value={g}>{g}</option>)}
                                         </select>
                                     </label>
                                     <label style={{ fontSize: '0.9rem', color: '#475569' }}>
                                         <strong>Treatment Group: </strong>
-                                        <select value={selectedTrt} onChange={e => setSelectedTrt(e.target.value)} style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                        <select
+                                            value={selectedTrt}
+                                            onChange={e => {
+                                                const newTrt = e.target.value;
+                                                setSelectedTrt(newTrt);
+                                                setSummary(prev => prev ? ({
+                                                    ...prev,
+                                                    controlCount: metaAssignments.filter(ma => (ma.Group || ma.group || '').toLowerCase() === selectedCtrl.toLowerCase()).length,
+                                                    treatedCount: metaAssignments.filter(ma => (ma.Group || ma.group || '').toLowerCase() === newTrt.toLowerCase()).length
+                                                }) : null);
+                                            }}
+                                            style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        >
                                             {Array.from(new Set([...uniqueGroups, 'Control', 'Treated'])).map(g => <option key={g} value={g}>{g}</option>)}
                                         </select>
                                     </label>

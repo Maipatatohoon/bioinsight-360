@@ -84,32 +84,46 @@ export default function ConsensusPage() {
 
           const metaLines = rawMetaCSV.trim().split('\n');
           const groupMap = {};
-          for (let i = 1; i < metaLines.length; i++) {
-            if (!metaLines[i].trim()) continue;
-            const [s, g] = parseCSVRow(metaLines[i]);
-            groupMap[s] = (g || '').toLowerCase();
+          if (metaLines.length > 0) {
+            const metaHeader = parseCSVRow(metaLines[0]).map(h => h.trim().toLowerCase());
+            let sIdx = metaHeader.findIndex(h => /^(sample|sample_?id|sample_?name|id|name)$/i.test(h));
+            if (sIdx === -1) sIdx = 0;
+            let gIdx = metaHeader.findIndex(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h));
+            if (gIdx === -1) gIdx = metaHeader.length > 1 ? 1 : 0;
+
+            for (let i = 1; i < metaLines.length; i++) {
+              if (!metaLines[i].trim()) continue;
+              const parts = parseCSVRow(metaLines[i]);
+              const s = (parts[sIdx] !== undefined ? parts[sIdx] : parts[0]) || '';
+              const g = (parts[gIdx] !== undefined ? parts[gIdx] : (parts.length > 1 ? parts[1] : '')) || '';
+              if (s.trim()) {
+                groupMap[s.trim()] = g.trim().toLowerCase();
+              }
+            }
           }
 
           const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
           const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
 
           const uniqueGroups = Array.from(new Set(Object.values(groupMap).map(g => g.toLowerCase()).filter(g => g !== 'exclude' && g !== '')));
-          
+
           let cGroup = activeControlGroup.toLowerCase();
           let tGroup = activeTreatedGroup.toLowerCase();
 
           // Intelligent fallback: if the default groups aren't in this dataset, auto-detect them.
           if (!uniqueGroups.includes(cGroup) && uniqueGroups.length > 0) {
-              cGroup = uniqueGroups.find(g => g.includes('control')) || uniqueGroups[0];
+              cGroup = uniqueGroups.find(g => g.includes('control') || g.includes('untreated') || g.includes('vehicle')) || uniqueGroups[0];
           }
           if (!uniqueGroups.includes(tGroup) && uniqueGroups.length > 1) {
-              tGroup = uniqueGroups.find(g => g !== cGroup) || uniqueGroups[1];
+              tGroup = uniqueGroups.find(g => g !== cGroup && !g.includes('exclude')) || uniqueGroups[1];
           }
 
           const controlIndices = [];
           const treatedIndices = [];
           sampleNames.forEach((name, idx) => {
-            const group = groupMap[name] || '';
+            const matchKey = Object.keys(groupMap).find(k => k === name) ||
+                             Object.keys(groupMap).find(k => k.toLowerCase() === name.toLowerCase());
+            const group = matchKey ? groupMap[matchKey] : '';
             const gLower = group.toLowerCase();
             if (gLower === cGroup) {
               controlIndices.push(idx);

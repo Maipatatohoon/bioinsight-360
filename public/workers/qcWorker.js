@@ -249,10 +249,22 @@ self.onmessage = function(e) {
 
   const metaLines = rawMetaCSV.trim().split('\n');
   const groupMap = {};
-  for (let i = 1; i < metaLines.length; i++) {
-    if (!metaLines[i].trim()) continue;
-    const [s, g] = parseCSVRow(metaLines[i]);
-    groupMap[s] = g || '';
+  if (metaLines.length > 0) {
+    const metaHeader = parseCSVRow(metaLines[0]).map(h => h.trim().toLowerCase());
+    let sIdx = metaHeader.findIndex(h => /^(sample|sample_?id|sample_?name|id|name)$/i.test(h));
+    if (sIdx === -1) sIdx = 0;
+    let gIdx = metaHeader.findIndex(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h));
+    if (gIdx === -1) gIdx = metaHeader.length > 1 ? 1 : 0;
+
+    for (let i = 1; i < metaLines.length; i++) {
+      if (!metaLines[i].trim()) continue;
+      const parts = parseCSVRow(metaLines[i]);
+      const s = (parts[sIdx] !== undefined ? parts[sIdx] : parts[0]) || '';
+      const g = (parts[gIdx] !== undefined ? parts[gIdx] : (parts.length > 1 ? parts[1] : '')) || '';
+      if (s.trim()) {
+        groupMap[s.trim()] = g.trim();
+      }
+    }
   }
 
   const includeIndices = [];
@@ -261,7 +273,9 @@ self.onmessage = function(e) {
 
   for (let i = 0; i < sampleNames.length; i++) {
     const name = sampleNames[i];
-    const group = groupMap[name] || (i % 2 === 0 ? 'Control' : 'Treated');
+    const matchKey = Object.keys(groupMap).find(k => k === name) ||
+                     Object.keys(groupMap).find(k => k.toLowerCase() === name.toLowerCase());
+    const group = (matchKey ? groupMap[matchKey] : (i % 2 === 0 ? 'Control' : 'Treated')) || 'Control';
     if (group.toLowerCase() !== 'exclude') {
       includeIndices.push(i);
       validSampleNames.push(name);

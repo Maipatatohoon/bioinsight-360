@@ -65,14 +65,14 @@ async function runBenchmark() {
 
   console.log("Starting JS consensus pipelines benchmark...");
   const startTime = performance.now();
-  
-  const results = runAllPipelines(countsMatrix, controlIndices, treatedIndices);
-  
+
+  const results = runAllPipelines(countsMatrix, geneNames, controlIndices, treatedIndices);
+
   const endTime = performance.now();
   const durationMs = endTime - startTime;
-  
+
   console.log(`[Benchmark] runAllPipelines executed in ${durationMs.toFixed(2)} ms`);
-  console.log(`Pipelines generated: ${results.length}`);
+  console.log(`Pipelines generated: ${results.pipelines.length}`);
 }
 
 runBenchmark().catch(console.error);
