@@ -345,14 +345,16 @@ export default function QCPage() {
                   <th>Group</th>
                   <th>Library Size</th>
                   <th>Detection</th>
+                  <th>Avg Corr (r)</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {sampleNames.map((name, idx) => {
-                  const stat = outlierStatus[idx];
+                  const stat = outlierStatus[idx] || { status: 'Pass', avgCorr: 1, reason: 'Normal' };
                   const isPass = stat.status === 'Pass';
                   const isWarn = stat.status === 'Warning';
+                  const avgCorr = stat.avgCorr !== undefined ? stat.avgCorr.toFixed(3) : 'N/A';
 
                   return (
                     <tr key={name}>
@@ -360,8 +362,13 @@ export default function QCPage() {
                       <td>{sampleGroups[idx]}</td>
                       <td style={{ fontFamily: 'monospace' }}>{(librarySizes[idx] / 1e6).toFixed(2)}M</td>
                       <td style={{ fontFamily: 'monospace' }}>{detectionRates[idx].toFixed(1)}%</td>
+                      <td style={{ fontFamily: 'monospace' }}>{avgCorr}</td>
                       <td>
-                        <span className={isPass ? 'badge-high' : isWarn ? 'badge-moderate' : 'badge-sensitive'}>
+                        <span
+                          className={isPass ? 'badge-high' : isWarn ? 'badge-moderate' : 'badge-sensitive'}
+                          title={stat.reason}
+                          style={{ cursor: 'help' }}
+                        >
                           {stat.status.toUpperCase()}
                         </span>
                       </td>

@@ -34,6 +34,9 @@ export default function ConsensusPage() {
   const [pval, setPval] = useState(() => {
     return typeof window !== 'undefined' ? parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05') : 0.05;
   });
+  const [pvalMetric, setPvalMetric] = useState(() => {
+    return typeof window !== 'undefined' ? (Storage.getItem('consensusPvalMetric') || 'auto') : 'auto';
+  });
   const [activeTab, setActiveTab] = useState('volcano');
   const [selectedGene, setSelectedGene] = useState(null);
 
@@ -161,25 +164,31 @@ export default function ConsensusPage() {
 
         setPipelineData(pData);
 
+        const initialMetric = Storage.getItem('consensusPvalMetric') || (mode === 'downstream' ? 'padj' : 'pvalue');
+        setPvalMetric(initialMetric);
+
         // Compute Consensus & Agreement Metrics
-        recalculateConsensus(pData, pData.geneNames, 1.0, parseFloat(pval));
+        recalculateConsensus(pData, pData.geneNames, parseFloat(fc), parseFloat(pval), initialMetric);
       } catch (err) {
         console.error('Error running consensus engine:', err);
       } finally {
         setLoading(false);
       }
     }
-    
+
     loadAndRunConsensus();
   }, []);
 
-  const recalculateConsensus = (pData, geneNames, currentFc, currentPval) => {
+  const recalculateConsensus = (pData, geneNames, currentFc, currentPval, currentMetric = pvalMetric) => {
     if (!pData) return;
-    const consensus = computeConsensus(pData.pipelines, geneNames, currentFc, currentPval);
+    const consensus = computeConsensus(pData.pipelines, geneNames, currentFc, currentPval, currentMetric);
     setConsensusResults(consensus);
 
-    const jMatrix = computePairwiseJaccard(pData.pipelines, currentFc, currentPval);
+    const jMatrix = computePairwiseJaccard(pData.pipelines, currentFc, currentPval, currentMetric);
     setJaccardMatrix(jMatrix);
+
+    const isDownstream = pData.pipelines.some(p => p.name === 'DESeq2' || p.name === 'edgeR' || p.name === 'limma');
+    const activeMetric = currentMetric === 'padj' ? 'padj' : currentMetric === 'pvalue' ? 'pvalue' : (isDownstream ? 'padj' : 'pvalue');
 
     // Compute binary matrix for Fleiss' Kappa (genes x pipelines)
     const numGenes = geneNames.length;
@@ -188,10 +197,16 @@ export default function ConsensusPage() {
 
     pData.pipelines.forEach((pipe, pIdx) => {
       pipe.results.forEach((res, gIdx) => {
-        if (res && Math.abs(res.log2fc) >= currentFc && res.padj <= currentPval) {
-          const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
-          if (binaryMatrix[actualIdx]) {
-            binaryMatrix[actualIdx][pIdx] = 1;
+        if (res) {
+          const metricVal = activeMetric === 'pvalue'
+            ? (res.pvalue !== undefined ? res.pvalue : res.padj)
+            : (res.padj !== undefined ? res.padj : res.pvalue);
+
+          if (Math.abs(res.log2fc) >= currentFc && metricVal <= currentPval) {
+            const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
+            if (binaryMatrix[actualIdx]) {
+              binaryMatrix[actualIdx][pIdx] = 1;
+            }
           }
         }
       });
@@ -208,7 +223,15 @@ export default function ConsensusPage() {
     Storage.setItem('consensusFcThreshold', String(newFc));
     Storage.setItem('consensusPvalThreshold', String(newPval));
     if (pipelineData) {
-      recalculateConsensus(pipelineData, pipelineData.geneNames, parseFloat(newFc), parseFloat(newPval));
+      recalculateConsensus(pipelineData, pipelineData.geneNames, parseFloat(newFc), parseFloat(newPval), pvalMetric);
+    }
+  };
+
+  const handleMetricChange = (newMetric) => {
+    setPvalMetric(newMetric);
+    Storage.setItem('consensusPvalMetric', newMetric);
+    if (pipelineData) {
+      recalculateConsensus(pipelineData, pipelineData.geneNames, parseFloat(fc), parseFloat(pval), newMetric);
     }
   };
 
@@ -265,44 +288,86 @@ export default function ConsensusPage() {
       </div>
 
       {/* Threshold Controls Bar */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1, duration: 0.6 }}
-        className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '3rem', alignItems: 'center' }}
+        className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}
       >
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: '1 1 200px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <label style={{ color: '#334155', fontWeight: '600' }}>|log₂FC| Threshold</label>
             <span style={{ fontWeight: 'bold', color: '#0284c7' }}>{fc}</span>
           </div>
-          <input 
-            type="range" 
-            min="0.2" 
-            max="3.0" 
-            step="0.1" 
-            value={fc} 
-            onChange={e => handleSliderChange(e.target.value, pval)} 
-            style={{ width: '100%', accentColor: '#0284c7' }} 
+          <input
+            type="range"
+            min="0.2"
+            max="3.0"
+            step="0.1"
+            value={fc}
+            onChange={e => handleSliderChange(e.target.value, pval)}
+            style={{ width: '100%', accentColor: '#0284c7' }}
           />
         </div>
 
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: '1 1 200px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <label style={{ color: '#334155', fontWeight: '600' }}>Adjusted p-value Cutoff</label>
+            <label style={{ color: '#334155', fontWeight: '600' }}>
+              {pvalMetric === 'padj' ? 'Adjusted p-value (FDR)' : 'Raw p-value Cutoff'}
+            </label>
             <span style={{ fontWeight: 'bold', color: '#0d9488' }}>{pval}</span>
           </div>
-          <input 
-            type="range" 
-            min="0.001" 
-            max="1.0" 
-            step="0.005" 
-            value={pval} 
-            onChange={e => handleSliderChange(fc, e.target.value)} 
-            style={{ width: '100%', accentColor: '#0d9488' }} 
+          <input
+            type="range"
+            min="0.001"
+            max="1.0"
+            step="0.005"
+            value={pval}
+            onChange={e => handleSliderChange(fc, e.target.value)}
+            style={{ width: '100%', accentColor: '#0d9488' }}
           />
         </div>
 
-        <button 
-          onClick={() => handleSliderChange(fc, pval)} 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          <label style={{ color: '#334155', fontWeight: '600', fontSize: '0.85rem' }}>Significance Metric</label>
+          <div style={{ display: 'flex', background: 'rgba(226, 232, 240, 0.7)', borderRadius: '8px', padding: '3px' }}>
+            <button
+              onClick={() => handleMetricChange('pvalue')}
+              style={{
+                padding: '0.4rem 0.8rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                fontWeight: 'bold',
+                background: pvalMetric === 'pvalue' ? '#0284c7' : 'transparent',
+                color: pvalMetric === 'pvalue' ? '#fff' : '#475569',
+                transition: 'all 0.2s'
+              }}
+              title="Raw p-value (standard for exploratory rank/asymptotic testing on small samples)"
+            >
+              Raw p-value
+            </button>
+            <button
+              onClick={() => handleMetricChange('padj')}
+              style={{
+                padding: '0.4rem 0.8rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                fontWeight: 'bold',
+                background: pvalMetric === 'padj' ? '#0284c7' : 'transparent',
+                color: pvalMetric === 'padj' ? '#fff' : '#475569',
+                transition: 'all 0.2s'
+              }}
+              title="Benjamini-Hochberg False Discovery Rate"
+            >
+              FDR (Adj. p)
+            </button>
+          </div>
+        </div>
+
+        <button
+          onClick={() => handleSliderChange(fc, pval)}
           className="btn-secondary"
           style={{ padding: '0.75rem 1.5rem', fontWeight: 'bold' }}
         >
@@ -311,18 +376,18 @@ export default function ConsensusPage() {
       </motion.div>
 
       {/* Methodology & Limitations Panel */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }}
         style={{ marginBottom: '2rem', padding: '1rem 1.5rem', background: 'rgba(254, 243, 199, 0.4)', borderLeft: '4px solid #f59e0b', borderRadius: '0 8px 8px 0' }}
       >
         <h3 style={{ color: '#b45309', margin: '0 0 0.5rem 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '1.2rem' }}>⚠️</span> Methodology Limitations (Compute Mode)
+          <span style={{ fontSize: '1.2rem' }}>⚠️</span> Methodology Limitations & Statistical Notes (Compute Mode)
         </h3>
         <p style={{ margin: 0, color: '#78350f', fontSize: '0.9rem', lineHeight: '1.5' }}>
-          This application uses <strong>Welch's t-test</strong> and <strong>Mann-Whitney U tests</strong> on normalized counts (CPM, UQ, MoR). 
-          These browser-based tests <strong>do not model negative binomial overdispersion</strong>, which is inherent in RNA-seq data. 
-          As a result, you may see significantly inflated false positives (more DEGs) compared to rigorous tools like <strong>DESeq2, edgeR, or limma</strong>. 
-          For publication-quality analysis, please run DESeq2 externally and upload the results using "Downstream Mode".
+          This browser engine evaluates <strong>Welch's t-test</strong> and <strong>Mann-Whitney U tests</strong> on normalized counts (CPM, UQ, MoR).
+          For cohorts with small replicate counts (e.g. $N \le 4$), non-parametric rank tests have a minimum discrete permutation p-value ($\approx 0.0286$).
+          Under Benjamini-Hochberg FDR correction across hundreds of genes, adjusted p-values cannot mathematically reach $\le 0.05$ on rank tests alone.
+          Therefore, <strong>Raw p-value</strong> is selected by default for exploratory multi-method consensus in Compute Mode, while <strong>FDR (Adj. p)</strong> is recommended when integrating negative-binomial shrinkage tools in <strong>Downstream Mode (DESeq2, edgeR, limma)</strong>.
         </p>
       </motion.div>
 
@@ -437,10 +502,11 @@ export default function ConsensusPage() {
               {activeTab === 'volcano' && (
                 <div style={{ display: 'grid', gridTemplateColumns: selectedGene ? '3fr 1fr' : '1fr', gap: '1.5rem' }}>
                   <div style={{ height: '480px' }}>
-                    <ConsensusVolcano 
-                      consensusResults={consensusResults} 
-                      fcThreshold={parseFloat(fc)} 
-                      pThreshold={parseFloat(pval)} 
+                    <ConsensusVolcano
+                      consensusResults={consensusResults}
+                      fcThreshold={parseFloat(fc)}
+                      pThreshold={parseFloat(pval)}
+                      pMetric={pvalMetric}
                       onGeneSelect={(geneName) => {
                         const target = consensusResults.find(r => r && r.geneName === geneName);
                         setSelectedGene(target);
@@ -462,7 +528,7 @@ export default function ConsensusPage() {
                       </div>
 
                       <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>
-                        Consensus Score: <strong style={{ color: '#fff' }}>{selectedGene.consensusScore}/{pipelineNames.length} Pipelines</strong>
+                        Consensus Score: <strong style={{ color: '#0284c7' }}>{selectedGene.consensusScore}/{pipelineNames.length} Pipelines</strong>
                       </div>
 
                       <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>
@@ -477,7 +543,8 @@ export default function ConsensusPage() {
                             const res = pipe.results.find(r => r && r.gene_index === selectedGene.geneName);
                             // gene_index in downstream is numerical, but geneName was pushed into geneNames array
                             const targetRes = pipe.results.find(r => r && pipelineData.geneNames[r.gene_index] === selectedGene.geneName) || res;
-                            const isSig = targetRes && targetRes.padj <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
+                            const mVal = targetRes ? (pvalMetric === 'pvalue' ? (targetRes.pvalue ?? targetRes.padj) : (targetRes.padj ?? targetRes.pvalue)) : 1;
+                            const isSig = targetRes && mVal <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
                             return (
                               <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', background: 'rgba(226, 232, 240, 0.5)', borderRadius: '4px' }}>
                                 <span>{name}</span>
@@ -497,7 +564,7 @@ export default function ConsensusPage() {
                   <div>
                     <h4 style={{ color: '#334155', marginBottom: '1rem' }}> Gene Agreement Heatmap (Top 50 DEGs)</h4>
                     <div style={{ height: '400px' }}>
-                      <AgreementHeatmap pipelines={pipelineData.pipelines} consensusResults={consensusResults} fcThreshold={parseFloat(fc)} pThreshold={parseFloat(pval)} />
+                      <AgreementHeatmap pipelines={pipelineData.pipelines} consensusResults={consensusResults} fcThreshold={parseFloat(fc)} pThreshold={parseFloat(pval)} pMetric={pvalMetric} />
                     </div>
                   </div>
 
@@ -518,7 +585,7 @@ export default function ConsensusPage() {
               )}
 
               {activeTab === 'deg' && (
-                <DEGTable consensusResults={consensusResults} onGeneSelect={(geneName) => {
+                <DEGTable consensusResults={consensusResults} pMetric={pvalMetric} onGeneSelect={(geneName) => {
                   const target = consensusResults.find(r => r && r.geneName === geneName);
                   setSelectedGene(target);
                   setActiveTab('volcano');
@@ -528,7 +595,11 @@ export default function ConsensusPage() {
               {activeTab === 'pipeline' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
                   {pipelineData.pipelines.map((pipe, idx) => {
-                    const sigCount = pipe.results.filter(r => r && Math.abs(r.log2fc) >= parseFloat(fc) && r.padj <= parseFloat(pval)).length;
+                    const sigCount = pipe.results.filter(r => {
+                      if (!r) return false;
+                      const mVal = pvalMetric === 'pvalue' ? (r.pvalue ?? r.padj) : (r.padj ?? r.pvalue);
+                      return Math.abs(r.log2fc) >= parseFloat(fc) && mVal <= parseFloat(pval);
+                    }).length;
                     return (
                       <div key={idx} className="glass-card" style={{ padding: '1.25rem' }}>
                         <h4 style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>

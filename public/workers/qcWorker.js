@@ -141,20 +141,87 @@ function mad(arr) {
   return median(deviations);
 }
 
-function detectOutliers(librarySizes, detectionRates) {
+function detectOutliers(librarySizes, detectionRates, corrMatrix = null) {
+  if (!librarySizes || librarySizes.length === 0) return [];
+  const n = librarySizes.length;
+
+  let meanCorrs = [];
+  let medCorr = 1;
+  let madCorr = 0;
+  if (corrMatrix && corrMatrix.length === n) {
+    meanCorrs = corrMatrix.map((row, i) => {
+      let sum = 0;
+      for (let j = 0; j < n; j++) {
+        if (j !== i) sum += row[j];
+      }
+      return n > 1 ? sum / (n - 1) : 1;
+    });
+    medCorr = median(meanCorrs);
+    madCorr = mad(meanCorrs);
+  }
+
   const medianSize = median(librarySizes);
   const madSize = mad(librarySizes);
   const medianRate = median(detectionRates);
   const madRate = mad(detectionRates);
+
   return librarySizes.map((size, idx) => {
-    const rate = detectionRates[idx];
-    const sizeZ = madSize > 0 ? (0.6745 * Math.abs(size - medianSize)) / madSize : 0;
-    const rateZ = madRate > 0 ? (0.6745 * Math.abs(rate - medianRate)) / madRate : 0;
-    let isOutlier = false, reason = 'Normal', status = 'Pass';
-    if (sizeZ > 3.0) { isOutlier = true; reason = `Extreme library size (Robust z=${sizeZ.toFixed(2)})`; status = 'Fail'; }
-    else if (rateZ > 3.0) { isOutlier = true; reason = `Low detection rate (Robust z=${rateZ.toFixed(2)})`; status = 'Fail'; }
-    else if (sizeZ > 2.0 || rateZ > 2.0) { reason = 'Moderate deviation from median'; status = 'Warning'; }
-    return { index: idx, sizeZ, rateZ, isOutlier, reason, status };
+    const rate = detectionRates ? detectionRates[idx] : 100;
+    const avgCorr = meanCorrs.length > 0 ? meanCorrs[idx] : 1;
+
+    const corrDiff = medCorr - avgCorr;
+    const corrZ = madCorr > 0 ? (0.6745 * corrDiff) / madCorr : 0;
+
+    const sizeDiff = medianSize - size;
+    const sizeZ = (size < medianSize && madSize > 0) ? (0.6745 * sizeDiff) / madSize : 0;
+
+    const rateDiff = medianRate - rate;
+    const rateZ = (rate < medianRate && madRate > 0) ? (0.6745 * rateDiff) / madRate : 0;
+
+    let isOutlier = false;
+    let isWarning = false;
+    const reasons = [];
+
+    if (meanCorrs.length > 0) {
+      if (avgCorr < 0.80 || (corrZ > 3.0 && avgCorr < 0.90)) {
+        isOutlier = true;
+        reasons.push(`Low inter-sample correlation (r=${avgCorr.toFixed(3)})`);
+      } else if (avgCorr < 0.85 || (corrZ > 2.0 && avgCorr < 0.92)) {
+        isWarning = true;
+        reasons.push(`Reduced correlation (r=${avgCorr.toFixed(3)})`);
+      }
+    }
+
+    if (size < 0.1 * medianSize || sizeZ > 3.5) {
+      isOutlier = true;
+      reasons.push(`Severely low library size (${(size / 1e6).toFixed(2)}M reads)`);
+    } else if (size < 0.3 * medianSize || sizeZ > 2.5) {
+      isWarning = true;
+      reasons.push(`Low library size (${(size / 1e6).toFixed(2)}M reads)`);
+    }
+
+    if (rate < 50 || rateZ > 3.5) {
+      isOutlier = true;
+      reasons.push(`Severely low detection rate (${rate.toFixed(1)}%)`);
+    } else if (rate < 70 || rateZ > 2.5) {
+      isWarning = true;
+      reasons.push(`Reduced detection rate (${rate.toFixed(1)}%)`);
+    }
+
+    const status = isOutlier ? 'Fail' : isWarning ? 'Warning' : 'Pass';
+    const reason = reasons.length > 0 ? reasons.join('; ') : 'Normal (Passed all QC criteria)';
+
+    return {
+      index: idx,
+      avgCorr,
+      corrZ,
+      sizeZ,
+      rateZ,
+      isOutlier,
+      isWarning,
+      reason,
+      status
+    };
   });
 }
 
@@ -301,7 +368,7 @@ self.onmessage = function(e) {
   const librarySizes = computeLibrarySizes(rawMatrix);
   const detectionRates = computeDetectionRates(rawMatrix);
   const corrMatrix = computeSampleCorrelation(filteredMatrix);
-  const outlierStatus = detectOutliers(librarySizes, detectionRates);
+  const outlierStatus = detectOutliers(librarySizes, detectionRates, corrMatrix);
 
   // 3. PCA (log2(CPM+1) normalized)
   const logCpmMatrix = Array.from({ length: filteredMatrix.length }, (_, g) => {

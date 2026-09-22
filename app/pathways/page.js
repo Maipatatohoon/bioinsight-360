@@ -90,19 +90,24 @@ export default function PathwaysPage() {
         // Read thresholds set by user on Consensus page (fall back to sensible defaults)
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
+        const userMetric = Storage.getItem('consensusPvalMetric') || (mode === 'downstream' ? 'padj' : 'pvalue');
 
         // Background universe = only genes measured in the experiment
         const experimentUniverse = pipelineData.geneNames;
 
-        console.log(`[BioInsight] Explicit organism: ${organism}, Input Genes: ${experimentUniverse.length}`);
+        console.log(`[BioInsight] Explicit organism: ${organism}, Input Genes: ${experimentUniverse.length}, Metric: ${userMetric}`);
 
         // Compute DEGs per pipeline and run g:Profiler for each
         const pipelineEnrichments = await Promise.all(pipelineData.pipelines.map(async pipe => {
           const degs = pipe.results
-            .filter(r => r && Math.abs(r.log2fc) >= userFc && r.padj <= userPval)
+            .filter(r => {
+              if (!r) return false;
+              const mVal = userMetric === 'pvalue' ? (r.pvalue !== undefined ? r.pvalue : r.padj) : (r.padj !== undefined ? r.padj : r.pvalue);
+              return Math.abs(r.log2fc) >= userFc && mVal <= userPval;
+            })
             .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
             .filter(Boolean);
-          
+
           if (degs.length === 0) return [];
           return await runGProfilerEnrichment(degs, experimentUniverse, organism);
         }));

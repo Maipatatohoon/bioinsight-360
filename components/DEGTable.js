@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 
-export default function DEGTable({ consensusResults = [], onGeneSelect }) {
+export default function DEGTable({ consensusResults = [], pMetric = 'auto', onGeneSelect }) {
   // Helper to extract min valid p-value from pvalues array
   const getMinPvalue = (pvalues) => {
     if (!pvalues || !Array.isArray(pvalues) || pvalues.length === 0) return 1;
@@ -16,6 +16,8 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
   const [sortConfig, setSortConfig] = useState({ key: 'consensusScore', direction: 'desc' });
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
+
+  const isPadjMode = pMetric === 'padj' || (pMetric === 'auto' && consensusResults[0]?.activeMetric === 'padj');
 
   const categories = ['All', 'High Confidence', 'Moderate Confidence', 'Method-Sensitive', 'Not Significant'];
 
@@ -33,14 +35,16 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
       const matchesCategory = categoryFilter === 'All' || gene.category === categoryMap[categoryFilter];
       return matchesSearch && matchesCategory;
     }).sort((a, b) => {
-      const aVal = sortConfig.key === 'pvalue' ? getMinPvalue(a.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(a[sortConfig.key] ?? 0) : (a[sortConfig.key] ?? 0);
-      const bVal = sortConfig.key === 'pvalue' ? getMinPvalue(b.pvalues) : sortConfig.key === 'log2fc_median' ? Math.abs(b[sortConfig.key] ?? 0) : (b[sortConfig.key] ?? 0);
-      
+      const aP = isPadjMode && a.padjs && a.padjs.length > 0 ? getMinPvalue(a.padjs) : getMinPvalue(a.pvalues);
+      const bP = isPadjMode && b.padjs && b.padjs.length > 0 ? getMinPvalue(b.padjs) : getMinPvalue(b.pvalues);
+      const aVal = sortConfig.key === 'pvalue' ? aP : sortConfig.key === 'log2fc_median' ? Math.abs(a[sortConfig.key] ?? 0) : (a[sortConfig.key] ?? 0);
+      const bVal = sortConfig.key === 'pvalue' ? bP : sortConfig.key === 'log2fc_median' ? Math.abs(b[sortConfig.key] ?? 0) : (b[sortConfig.key] ?? 0);
+
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [consensusResults, search, categoryFilter, sortConfig]);
+  }, [consensusResults, search, categoryFilter, sortConfig, isPadjMode]);
 
   const paginatedData = filteredData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
   const totalPages = Math.ceil(filteredData.length / rowsPerPage) || 1;
@@ -54,15 +58,16 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
   };
 
   const downloadCSV = () => {
-    const headers = ['Gene Name', 'Consensus Score', 'Category', 'Median Log2FC', 'P-value'];
+    const headers = ['Gene Name', 'Consensus Score', 'Category', 'Median Log2FC', 'P-value', 'FDR (Adj. p)'];
     const csvData = filteredData.map(g => [
       g.geneName,
       g.consensusScore,
       g.category,
       g.log2fc_median?.toFixed(2) || '',
-      (getMinPvalue(g.pvalues)).toExponential(2)
+      (getMinPvalue(g.pvalues)).toExponential(2),
+      g.padjs && g.padjs.length > 0 ? (getMinPvalue(g.padjs)).toExponential(2) : ''
     ]);
-    
+
     const csvContent = [headers.join(','), ...csvData.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -119,7 +124,7 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
               <th className="px-4 py-3 cursor-pointer hover:text-black" onClick={() => requestSort('consensusScore')}>Score</th>
               <th className="px-4 py-3">Category</th>
               <th className="px-4 py-3 cursor-pointer hover:text-black" onClick={() => requestSort('log2fc_median')}>Log2FC</th>
-              <th className="px-4 py-3 cursor-pointer hover:text-black" onClick={() => requestSort('pvalue')}>P-value</th>
+              <th className="px-4 py-3 cursor-pointer hover:text-black" onClick={() => requestSort('pvalue')}>{isPadjMode ? 'FDR (Adj. p)' : 'P-value'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700">
@@ -140,7 +145,11 @@ export default function DEGTable({ consensusResults = [], onGeneSelect }) {
                   </span>
                 </td>
                 <td className="px-4 py-3">{gene.log2fc_median?.toFixed(3) || '-'}</td>
-                <td className="px-4 py-3">{getMinPvalue(gene.pvalues).toExponential(2)}</td>
+                <td className="px-4 py-3">
+                  {isPadjMode && gene.padjs && gene.padjs.length > 0
+                    ? getMinPvalue(gene.padjs).toExponential(2)
+                    : getMinPvalue(gene.pvalues).toExponential(2)}
+                </td>
               </tr>
             ))}
             {paginatedData.length === 0 && (
