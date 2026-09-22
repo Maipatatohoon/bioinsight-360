@@ -71,12 +71,18 @@ export default function QCPage() {
         try {
           const groupCounts = {};
           const metaLines = rawMetaCSV.trim().split('\n');
-          for (let i = 1; i < metaLines.length; i++) {
-            if (!metaLines[i].trim()) continue;
-            const parts = metaLines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
-            const group = parts[1];
-            if (group && group.toLowerCase() !== 'exclude') {
-              groupCounts[group] = (groupCounts[group] || 0) + 1;
+          if (metaLines.length > 1) {
+            const metaHeader = metaLines[0].split(',').map(s => s.trim().replace(/^"|"$/g, '').toLowerCase());
+            let gIdx = metaHeader.findIndex(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h));
+            if (gIdx === -1) gIdx = metaHeader.length > 1 ? 1 : 0;
+
+            for (let i = 1; i < metaLines.length; i++) {
+              if (!metaLines[i].trim()) continue;
+              const parts = metaLines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+              const group = parts[gIdx] || (parts.length > 1 ? parts[1] : parts[0]);
+              if (group && group.toLowerCase() !== 'exclude') {
+                groupCounts[group] = (groupCounts[group] || 0) + 1;
+              }
             }
           }
           const counts = Object.values(groupCounts);
