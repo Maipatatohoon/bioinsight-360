@@ -1,7 +1,7 @@
 'use client';
 import { Storage } from '../../lib/storage';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import ConsensusVolcano from '../../components/ConsensusVolcano';
 import AgreementHeatmap from '../../components/AgreementHeatmap';
@@ -190,11 +190,10 @@ export default function ConsensusPage() {
     const isDownstream = pData.pipelines.some(p => p.name === 'DESeq2' || p.name === 'edgeR' || p.name === 'limma');
     const activeMetric = currentMetric === 'padj' ? 'padj' : currentMetric === 'pvalue' ? 'pvalue' : (isDownstream ? 'padj' : 'pvalue');
 
-    // Compute binary matrix for Fleiss' Kappa (genes x pipelines)
+    // ponytail: flat Uint8Array instead of Array<Array> — 5-10x less GC pressure for large gene sets
     const numGenes = geneNames.length;
     const numPipelines = pData.pipelines.length;
-    const binaryMatrix = Array.from({ length: numGenes }, () => new Array(numPipelines).fill(0));
-
+    const flat = new Uint8Array(numGenes * numPipelines);
     pData.pipelines.forEach((pipe, pIdx) => {
       pipe.results.forEach((res, gIdx) => {
         if (res) {
@@ -204,28 +203,33 @@ export default function ConsensusPage() {
 
           if (Math.abs(res.log2fc) >= currentFc && metricVal <= currentPval) {
             const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
-            if (binaryMatrix[actualIdx]) {
-              binaryMatrix[actualIdx][pIdx] = 1;
+            if (actualIdx >= 0 && actualIdx < numGenes) {
+              flat[actualIdx * numPipelines + pIdx] = 1;
             }
           }
         }
       });
     });
-
-    const kappa = computeFleissKappa(binaryMatrix);
-    setFleissKappa(kappa);
+    // Convert to the format computeFleissKappa expects
+    const binaryMatrix = Array.from({ length: numGenes }, (_, i) =>
+      Array.from(flat.subarray(i * numPipelines, (i + 1) * numPipelines))
+    );
+    setFleissKappa(computeFleissKappa(binaryMatrix));
   };
 
-  const handleSliderChange = (newFc, newPval) => {
+  // ponytail: debounce via ref — avoids lodash dep, fires recalculate 300ms after last drag
+  const debounceTimer = useRef(null);
+  const handleSliderChange = useCallback((newFc, newPval) => {
     setFc(newFc);
     setPval(newPval);
-    // Persist thresholds so pathways/export pages use the same values
     Storage.setItem('consensusFcThreshold', String(newFc));
     Storage.setItem('consensusPvalThreshold', String(newPval));
-    if (pipelineData) {
+    if (!pipelineData) return;
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
       recalculateConsensus(pipelineData, pipelineData.geneNames, parseFloat(newFc), parseFloat(newPval), pvalMetric);
-    }
-  };
+    }, 300);
+  }, [pipelineData, pvalMetric]);
 
   const handleMetricChange = (newMetric) => {
     setPvalMetric(newMetric);
@@ -235,13 +239,18 @@ export default function ConsensusPage() {
     }
   };
 
-  const highConfCount = consensusResults.filter(r => r && r.category === 'high_confidence').length;
-  const modConfCount = consensusResults.filter(r => r && r.category === 'moderate_confidence').length;
-  const sensCount = consensusResults.filter(r => r && r.category === 'method_sensitive').length;
-  const totalDEGs = highConfCount + modConfCount;
-  
-  const upRegCount = consensusResults.filter(r => r && (r.category === 'high_confidence' || r.category === 'moderate_confidence') && r.log2fc_median > 0).length;
-  const downRegCount = consensusResults.filter(r => r && (r.category === 'high_confidence' || r.category === 'moderate_confidence') && r.log2fc_median < 0).length;
+  // Memoised — runs once per consensus recalculation, not on every render
+  const derivedStats = useMemo(() => {
+    let high = 0, mod = 0, sens = 0, up = 0, down = 0;
+    for (const r of consensusResults) {
+      if (!r) continue;
+      if (r.category === 'high_confidence') { high++; if (r.log2fc_median > 0) up++; else down++; }
+      else if (r.category === 'moderate_confidence') { mod++; if (r.log2fc_median > 0) up++; else down++; }
+      else if (r.category === 'method_sensitive') sens++;
+    }
+    return { highConfCount: high, modConfCount: mod, sensCount: sens, totalDEGs: high + mod, upRegCount: up, downRegCount: down };
+  }, [consensusResults]);
+  const { highConfCount, modConfCount, sensCount, totalDEGs, upRegCount, downRegCount } = derivedStats;
 
   let kappaLabel = 'Poor Agreement';
   let kappaColor = '#e11d48';
