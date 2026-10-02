@@ -1,0 +1,12 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/ncbi/route": "app/api/ncbi/route.js",
+  "/consensus/page": "app/consensus/page.js",
+  "/export/page": "app/export/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/page": "app/page.js",
+  "/pathways/page": "app/pathways/page.js",
+  "/qc/page": "app/qc/page.js",
+  "/upload/page": "app/upload/page.js"
+}
