@@ -1,11 +1,29 @@
 // frontend/lib/backend_api.js
 // Client library to manage connection to Python FastAPI / R Bioconductor Backend
+import { resolveBackendUrl, readStoredBackendUrl, writeStoredBackendUrl } from './backendUrl.mjs';
 
 const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
+/**
+ * The effective backend URL: a per-browser override (set from the UI) wins over
+ * the build-time NEXT_PUBLIC_BACKEND_URL. This lets a deployed build point at a
+ * Colab tunnel URL at runtime without a Vercel rebuild.
+ */
 export const getBackendUrl = () => {
-    return DEFAULT_BACKEND_URL.replace(/\/+$/, '');
+    return resolveBackendUrl(readStoredBackendUrl(), DEFAULT_BACKEND_URL);
 };
+
+/** Save (or clear, with an empty string) a runtime backend URL override. */
+export const setBackendUrl = (url) => {
+    writeStoredBackendUrl(url);
+};
+
+export const clearBackendUrl = () => {
+    writeStoredBackendUrl('');
+};
+
+/** The build-time default, for display in the settings UI. */
+export const getDefaultBackendUrl = () => resolveBackendUrl(null, DEFAULT_BACKEND_URL);
 
 export const checkBackendHealth = async () => {
     const baseUrl = getBackendUrl();

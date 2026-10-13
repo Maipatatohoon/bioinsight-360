@@ -23,12 +23,16 @@ talks only to these routes (already implemented in `frontend/lib/backend_api.js`
 
 1. Open **`BioInsight_360_Colab_Runbook.ipynb`** in Colab and run it top to bottom.
 2. Section 4 prints a public URL like `https://xxxx.trycloudflare.com`.
-3. In Vercel → Project → Settings → Environment Variables, set
-   `NEXT_PUBLIC_BACKEND_URL = <that URL>`, then **Redeploy** (build-time var).
+3. **Connect the site — pick one:**
+   - **No redeploy needed (recommended):** on the deployed site, click **Backend** in the
+     navbar, paste the tunnel URL, press **Test & Save**. It is stored in that browser and
+     used immediately — ideal because the Colab URL changes every session.
+   - **Bake it in:** set `NEXT_PUBLIC_BACKEND_URL` in Vercel → Settings → Environment
+     Variables, then **Redeploy** (build-time value).
 4. Leave the worker cell running. Submit an analysis from the site; the worker computes it.
 
-> `NEXT_PUBLIC_*` values are baked in at build time — changing the variable does not update a
-> running deployment. Redeploy after every change.
+> `NEXT_PUBLIC_*` values are baked in at build time — changing the Vercel variable does not
+> update a running deployment without a redeploy. The in-app **Backend** control avoids that.
 
 ## Production path — host the backend
 
