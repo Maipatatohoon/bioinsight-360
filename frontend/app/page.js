@@ -98,7 +98,7 @@ export default function Home() {
           </div>
           <h3 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, color: 'var(--text-primary)' }}>Cloud & Local Execution</h3>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Instantly interpret DEG CSV files in your browser, or connect to our Python/R Colab engine for raw counts.
+            Instantly interpret DEG CSV files in your browser, or connect to our Python/R backend engine for raw counts.
           </p>
         </div>
       </section>

@@ -11,7 +11,7 @@
    - Maintains statistical rigor: empirical Bayes dispersion shrinkage, TMM normalization, precision weighting, and Benjamini-Hochberg FDR correction.
 
 2. **Job-Oriented Asynchronous Architecture:**
-   - Decoupled Next.js React frontend (hosted on Vercel) and Python FastAPI computation worker (hosted on Google Colab / Docker).
+   - Decoupled Next.js React frontend (hosted on Vercel) and Python FastAPI computation worker (hosted on Docker / Cloud Provider).
    - Asynchronous job queue (`QUEUED`, `VALIDATING`, `ANALYZING`, `GENERATING_RESULTS`, `COMPLETED`, `FAILED`) prevents HTTP request timeouts.
 
 3. **Multi-Tool Consensus & Robustness Auditing:**
@@ -37,7 +37,7 @@
                │                                          │
                │  - Interactive Volcano & MA Plots        │
                │  - DE Method Consensus Heatmaps          │
-               │  - Colab Server Connection Modal         │
+               │  - Downstream Integration Dashboard      │
                └────────────────────┬─────────────────────┘
                                     │
                          REST API (JSON Handoff)
@@ -70,7 +70,7 @@
 bioinsight-360-app/
 ├── frontend/                   # Next.js React Application
 │   ├── app/                    # App Router Pages (/upload, /qc, /consensus, /pathways, /export)
-│   ├── components/             # UI Components (Navbar, Volcano, Heatmap, ColabBackendModal)
+│   ├── components/             # UI Components (Navbar, Volcano, Heatmap, JaccardMatrix)
 │   ├── lib/                    # API Clients & Visualization Helpers (backend_api.js, consensus.js)
 │   ├── package.json            # Node.js dependencies
 │   └── next.config.mjs         # Next.js Configuration
@@ -83,7 +83,6 @@ bioinsight-360-app/
 │   │   ├── edger/              # edger_script.R
 │   │   └── limma/              # limma_script.R
 │   ├── tests/                  # Pytest / Unittest Suite (test_backend.py)
-│   ├── colab_worker.py         # Google Colab Worker Launcher
 │   ├── Dockerfile              # Docker container setup (Python 3.10 + R + Bioconductor)
 │   └── requirements.txt        # Python dependencies
 └── README.md
@@ -117,20 +116,6 @@ uvicorn app.main:app --reload --port 8000
 cd backend
 .venv/bin/python3 tests/test_backend.py
 ```
-
----
-
-## ⚡ Google Colab Worker Setup (Zero-Cost High-RAM Backend)
-
-1. Open a new notebook on [Google Colab](https://colab.research.google.com/).
-2. Run `colab_worker.py`:
-   ```python
-   !git clone https://github.com/Maipatatohoon/bioinsight-backend.git
-   %cd bioinsight-backend
-   !python colab_worker.py <YOUR_NGROK_AUTHTOKEN>
-   ```
-3. Copy the output URL (e.g. `https://xxxx.ngrok-free.app`).
-4. Click **⚡ Colab Server** in the BioInsight 360 navbar, paste the URL, and click **Save & Connect**.
 
 ---
 

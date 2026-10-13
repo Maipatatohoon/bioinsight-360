@@ -15,6 +15,10 @@ export default function QCPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [qcData, setQcData] = useState(null);
+  const [jobState, setJobState] = useState('QUEUED');
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobMessage, setJobMessage] = useState('Initializing...');
+
   const [cpmThreshold, setCpmThreshold] = useState(() => {
     return parseFloat(Storage.getItem('cpmThreshold') || '1.0');
   });
@@ -23,6 +27,7 @@ export default function QCPage() {
   });
 
   // Debounce: only re-run Worker 500ms after user stops dragging
+  // Note: Backend handles QC now, so CPM threshold here is just for display/future filtering
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedCpm(cpmThreshold);
@@ -32,93 +37,65 @@ export default function QCPage() {
   }, [cpmThreshold]);
 
   useEffect(() => {
-    let worker;
-    async function loadInitialData() {
+    let isMounted = true;
+    let pollInterval;
+
+    async function pollJob() {
       try {
-        setLoading(true);
-        if (Storage.getItem('analysisMode') === 'downstream') {
-          router.replace('/consensus');
+        const jobId = Storage.getItem('currentJobId');
+        if (!jobId) {
+          router.replace('/upload');
           return;
         }
 
-        let rawCountsCSV = Storage.getItem('rawCounts');
-        let rawMetaCSV = Storage.getItem('rawMetadata');
-
-        if (!rawCountsCSV || !rawMetaCSV) {
-          const countRes = await fetch('/data/demo_counts.csv');
-          rawCountsCSV = await countRes.text();
-          const metaRes = await fetch('/data/demo_metadata.csv');
-          rawMetaCSV = await metaRes.text();
-        }
-
-        worker = new Worker('/workers/qcWorker.js');
+        const { getJobStatus } = await import('../../lib/backend_api');
         
-        worker.onmessage = (e) => {
-          const { filteredCSV, qcData: newQcData } = e.data;
-          Storage.setItem('filteredCounts', filteredCSV);
-          setQcData(newQcData);
+        const status = await getJobStatus(jobId);
+        
+        if (!isMounted) return;
+
+        setJobState(status.state);
+        setJobProgress(status.progress);
+        setJobMessage(status.message);
+
+        if (status.qc_data) {
+          setQcData(status.qc_data);
           setLoading(false);
-          worker.terminate();
-        };
-
-        worker.onerror = (error) => {
-          console.error('QC Worker Error:', error);
-          setLoading(false);
-          worker.terminate();
-        };
-
-        let minGroupSize = 2;
-        try {
-          const groupCounts = {};
-          const metaLines = rawMetaCSV.trim().split('\n');
-          if (metaLines.length > 1) {
-            const metaHeader = metaLines[0].split(',').map(s => s.trim().replace(/^"|"$/g, '').toLowerCase());
-            let gIdx = metaHeader.findIndex(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h));
-            if (gIdx === -1) gIdx = metaHeader.length > 1 ? 1 : 0;
-
-            for (let i = 1; i < metaLines.length; i++) {
-              if (!metaLines[i].trim()) continue;
-              const parts = metaLines[i].split(',').map(s => s.trim().replace(/^"|"$/g, ''));
-              const group = parts[gIdx] || (parts.length > 1 ? parts[1] : parts[0]);
-              if (group && group.toLowerCase() !== 'exclude') {
-                groupCounts[group] = (groupCounts[group] || 0) + 1;
-              }
-            }
-          }
-          const counts = Object.values(groupCounts);
-          if (counts.length > 0) {
-            minGroupSize = Math.min(...counts);
-          }
-        } catch (e) {
-          console.error('Error computing minGroupSize', e);
         }
 
-        worker.postMessage({
-          rawCountsCSV,
-          rawMetaCSV,
-          cpmThreshold: debouncedCpm,
-          minGroupSize
-        });
-
+        if (status.state === 'FAILED') {
+          console.error("Job failed:", status.error);
+          clearInterval(pollInterval);
+        } else if (status.state === 'COMPLETED') {
+          clearInterval(pollInterval);
+        }
+        
       } catch (err) {
-        console.error('Error loading data:', err);
-        setLoading(false);
+        console.error('Error polling job status:', err);
       }
     }
-    loadInitialData();
-    
-    // Cleanup: Terminate worker if component unmounts before completion
+
+    if (Storage.getItem('analysisMode') === 'downstream') {
+      router.replace('/consensus');
+    } else {
+      pollJob();
+      pollInterval = setInterval(pollJob, 2000);
+    }
+
     return () => {
-      if (worker) worker.terminate();
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
     };
-  }, [router, debouncedCpm]);
+  }, [router]);
 
   if (loading || !qcData) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', color: '#0f172a' }}>
         <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
-        <h2 style={{ color: '#0284c7', marginBottom: '0.5rem' }}>Running Quality Control Pipelines...</h2>
-        <p style={{ color: '#1e293b' }}>Analyzing library sizes, detection rates, PCA, and correlation matrices</p>
+        <h2 style={{ color: '#0284c7', marginBottom: '0.5rem' }}>{jobMessage}</h2>
+        <div style={{ width: '300px', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginTop: '1rem' }}>
+          <div style={{ height: '100%', width: `${jobProgress}%`, background: '#0284c7', transition: 'width 0.5s ease-in-out' }}></div>
+        </div>
       </div>
     );
   }
@@ -146,6 +123,8 @@ export default function QCPage() {
     varianceExplained: pcaResult.varianceExplained || [50, 30]
   };
 
+  const isCompleted = jobState === 'COMPLETED';
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -164,13 +143,28 @@ export default function QCPage() {
           </p>
         </div>
 
-        <button 
-          onClick={() => router.push('/consensus')}
-          className="btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem', fontWeight: 'bold' }}
-        >
-          Proceed to Consensus Analysis →
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+          <button 
+            onClick={() => isCompleted && router.push(`/consensus?jobId=${Storage.getItem('currentJobId')}`)}
+            className={isCompleted ? "btn-primary" : "btn-disabled"}
+            disabled={!isCompleted}
+            style={{ 
+              display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', 
+              fontSize: '1rem', fontWeight: 'bold',
+              background: isCompleted ? undefined : '#cbd5e1',
+              cursor: isCompleted ? 'pointer' : 'not-allowed',
+              opacity: isCompleted ? 1 : 0.7
+            }}
+          >
+            {isCompleted ? 'Proceed to Consensus Analysis →' : 'Analysis in Progress...'}
+          </button>
+          {!isCompleted && (
+            <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid #64748b', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+              {jobMessage} ({jobProgress}%)
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Low-Expression Gene Filter (CPM) */}

@@ -1,28 +1,4 @@
-import { normalizeCPM, normalizeUpperQuartile, normalizeMedianOfRatios } from './normalize.js';
-import { runDifferentialExpression } from './statistics.js';
 import { median } from './mathUtils.js';
-
-/**
- * Run all normalization and testing pipelines.
- */
-export function runAllPipelines(rawMatrix, geneNames, groupIndices1, groupIndices2) {
-  const normalizers = [
-    { name: 'CPM', fn: normalizeCPM },
-    { name: 'UQ', fn: normalizeUpperQuartile },
-    { name: 'MedianRatios', fn: normalizeMedianOfRatios }
-  ];
-  const tests = ['welch', 'mannWhitney'];
-  
-  const pipelines = [];
-  for (const norm of normalizers) {
-    const normMatrix = norm.fn(rawMatrix);
-    for (const test of tests) {
-      const deRes = runDifferentialExpression(normMatrix, groupIndices1, groupIndices2, test);
-      pipelines.push({ name: `${norm.name}_${test}`, results: deRes });
-    }
-  }
-  return { pipelines, geneNames };
-}
 
 /**
  * Format pre-computed downstream DEGs (DESeq2, edgeR, limma) into pipeline structure.

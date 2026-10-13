@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { fetchGeoMetadata } from '../../lib/geo_api';
 import { motion } from 'framer-motion';
+import { submitAnalysisJob } from '../../lib/backend_api';
 
 export function processCountMatrix(rawText) {
     if (!rawText || !rawText.trim()) {
@@ -203,32 +204,12 @@ export default function UploadPage() {
                 Storage.removeItem('limmaData');
                 setDegSummary(null);
             } else {
-                // Mock fallback if files are not present
-                const mockSamples = Array.from({length: 12}, (_, i) => `Sample_${i+1}`);
-                const mock = mockSamples.map((s, i) => ({
-                    Sample: s,
-                    Group: i < 6 ? 'Control' : 'Treated'
-                }));
-                const mockCounts = [{Gene: 'GENE1'}];
-                mockSamples.forEach(s => { mockCounts[0][s] = 10; });
-
-                setSummary({
-                    genes: 15000,
-                    samples: mockSamples,
-                    controlCount: 6,
-                    treatedCount: 6
-                });
-                Storage.setItem('rawCounts', Papa.unparse(mockCounts));
-                Storage.setItem('rawMetadata', Papa.unparse(mock));
-                Storage.setItem('metaData', JSON.stringify(mock));
-                setMetaAssignments(mock);
-                Storage.setItem('analysisMode', 'compute');
-                Storage.removeItem('filteredCounts');
-                Storage.removeItem('pipelineData');
-                setDegSummary(null);
+                // Fail if actual demo data missing
+                throw new Error('Failed to fetch demo dataset files (GSE52778).');
             }
         } catch (e) {
             console.error('Failed to load demo', e);
+            alert("Failed to load demo dataset: " + e.message);
         }
         setLoading(false);
     };
@@ -247,55 +228,7 @@ export default function UploadPage() {
         setIsFetchingGeo(false);
     };
 
-    const handleLoadDegDemo = async () => {
-        setLoading(true);
-        try {
-            // Use real gene names from our GO annotations so pathways work correctly
-            const realGenes = [
-                'TP53','BRCA1','EGFR','MYC','KRAS','PTEN','RB1','AKT1','VEGFA','MTOR',
-                'PIK3CA','BRAF','CDK4','CDK6','BCL2','BAX','CASP3','CASP9','GAPDH','ACTB',
-                'TNF','IL6','IL1B','STAT3','JAK2','NFKB1','TGFB1','WNT1','NOTCH1','HIF1A',
-                'ERBB2','FGFR1','PDGFRA','KIT','MET','ALK','ROS1','RET','RAF1','MAP2K1',
-                'MAPK1','MAPK3','MDM2','CDKN2A','SMAD4','FOS','JUN'
-            ];
-            // Build mock data: first ~15 genes are significant DEGs, rest are not
-            const mockDegData = realGenes.map((gene, i) => {
-                const isSig = i < 15;
-                return {
-                    Gene_ID: gene,
-                    logFC: isSig ? (Math.random() * 4 - 2).toFixed(3) : (Math.random() * 0.5 - 0.25).toFixed(3),
-                    pvalue: isSig ? (Math.random() * 0.01).toFixed(6) : (Math.random() * 0.99 + 0.01).toFixed(4),
-                    padj: isSig ? (Math.random() * 0.04).toFixed(6) : (Math.random() * 0.99 + 0.01).toFixed(4)
-                };
-            });
-            // Slightly jitter the other tools so they aren't identical
-            const jitter = (g) => ({...g, 
-                padj: (parseFloat(g.padj) * (Math.random() * 0.4 + 0.8)).toFixed(6),
-                pvalue: (parseFloat(g.pvalue) * (Math.random() * 0.4 + 0.8)).toFixed(6)
-            });
-            const mockEdgeR = mockDegData.map(jitter);
-            const mockLimma = mockDegData.map(jitter);
 
-            Storage.setItem('deseq2Data', JSON.stringify(mockDegData));
-            Storage.setItem('edgerData', JSON.stringify(mockEdgeR));
-            Storage.setItem('limmaData', JSON.stringify(mockLimma));
-            
-            Storage.setItem('analysisMode', 'downstream');
-            // Clear stale compute-mode artifacts
-            Storage.removeItem('rawCounts');
-            Storage.removeItem('filteredCounts');
-            Storage.removeItem('rawMetadata');
-            
-            setDegSummary({
-                genes: mockDegData.length,
-                tools: 3
-            });
-            setSummary(null); // Clear raw count summary
-        } catch (e) {
-            console.error('Failed to load DEG demo', e);
-        }
-        setLoading(false);
-    };
 
     const handleImportGeoFile = async (fileInfo) => {
         setLoading(true);
@@ -677,13 +610,6 @@ export default function UploadPage() {
                                 </label>
                             )})}
                         </div>
-                        
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            <button onClick={handleLoadDegDemo} disabled={loading} style={{ padding: '0.75rem 1.5rem', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'background 0.2s' }}>
-                                {loading ? 'Loading...' : 'Load Demo Pipeline Results'}
-                            </button>
-                            <span style={{ color: '#64748b' }}>Instantly generates consensus for 3 mock pipelines</span>
-                        </div>
                     </div>
                 )}
 
@@ -886,12 +812,41 @@ export default function UploadPage() {
                                     </label>
                                 </div>
                             </div>
-                            <button onClick={() => {
-                                Storage.setItem('activeControlGroup', selectedCtrl);
-                                Storage.setItem('activeTreatedGroup', selectedTrt);
-                                router.push('/qc');
-                            }} style={{ padding: '1rem 2.5rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'none'}>
-                                Proceed to QC & Analysis →
+                            <button onClick={async () => {
+                                setLoading(true);
+                                try {
+                                    const countsStr = Storage.getItem('rawCounts');
+                                    const metaStr = Storage.getItem('rawMetadata');
+                                    if (!countsStr || !metaStr) {
+                                        throw new Error("Missing count or metadata.");
+                                    }
+                                    
+                                    const countsBlob = new Blob([countsStr], { type: 'text/csv' });
+                                    const metadataBlob = new Blob([metaStr], { type: 'text/csv' });
+                                    
+                                    const params = {
+                                        control_group: selectedCtrl,
+                                        treated_group: selectedTrt
+                                    };
+                                    
+                                    const jobRes = await submitAnalysisJob(countsBlob, metadataBlob, params);
+                                    
+                                    Storage.setItem('currentJobId', jobRes.job_id);
+                                    Storage.setItem('activeControlGroup', selectedCtrl);
+                                    Storage.setItem('activeTreatedGroup', selectedTrt);
+                                    
+                                    // Offload heavy data from localStorage
+                                    Storage.removeItem('rawCounts');
+                                    Storage.removeItem('rawMetadata');
+                                    
+                                    router.push('/qc');
+                                } catch (e) {
+                                    alert("Analysis submission failed: " + e.message);
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }} disabled={loading} style={{ padding: '1rem 2.5rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)', transition: 'transform 0.2s', opacity: loading ? 0.7 : 1 }} onMouseOver={(e) => !loading && (e.currentTarget.style.transform = 'translateY(-2px)')} onMouseOut={(e) => !loading && (e.currentTarget.style.transform = 'none')}>
+                                {loading ? 'Submitting...' : 'Proceed to QC & Analysis →'}
                             </button>
                         </div>
                     </div>

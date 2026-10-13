@@ -1,8 +1,8 @@
 'use client';
 import { Storage } from '../../lib/storage';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ConsensusVolcano from '../../components/ConsensusVolcano';
 import AgreementHeatmap from '../../components/AgreementHeatmap';
 import UpSetPlot from '../../components/UpSetPlot';
@@ -25,7 +25,7 @@ function parseCSVRow(line) {
   return result;
 }
 
-export default function ConsensusPage() {
+function ConsensusPageContent() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [fc, setFc] = useState(() => {
@@ -46,6 +46,8 @@ export default function ConsensusPage() {
   const [fleissKappa, setFleissKappa] = useState(0);
   const [analysisMode, setAnalysisMode] = useState('compute');
 
+  const searchParams = useSearchParams();
+
   useEffect(() => {
     async function loadAndRunConsensus() {
       try {
@@ -57,109 +59,28 @@ export default function ConsensusPage() {
         await new Promise(resolve => setTimeout(resolve, 50));
 
         let pData;
+        const jobId = searchParams.get('jobId');
         
-        if (mode === 'downstream') {
-          const deseq2 = JSON.parse(Storage.getItem('deseq2Data'));
-          const edger = JSON.parse(Storage.getItem('edgerData'));
-          const limma = JSON.parse(Storage.getItem('limmaData'));
-          pData = formatDownstreamPipelines(deseq2, edger, limma);
+        if (mode === 'downstream' || jobId) {
+          if (jobId) {
+            const { getJobResults } = await import('../../lib/backend_api');
+            const jobData = await getJobResults(jobId);
+            
+            pData = formatDownstreamPipelines(
+              jobData.results.deseq2 || [],
+              jobData.results.edger || [],
+              jobData.results.limma || []
+            );
+            setAnalysisMode('downstream'); // force downstream mode for backend results
+          } else {
+            const deseq2 = JSON.parse(Storage.getItem('deseq2Data') || '[]');
+            const edger = JSON.parse(Storage.getItem('edgerData') || '[]');
+            const limma = JSON.parse(Storage.getItem('limmaData') || '[]');
+            pData = formatDownstreamPipelines(deseq2, edger, limma);
+          }
         } else {
-          let filteredCSV = Storage.getItem('filteredCounts');
-          let rawMetaCSV = Storage.getItem('rawMetadata');
-
-          if (!filteredCSV || !rawMetaCSV) {
-            router.replace('/qc');
-            return;
-          }
-
-          const lines = filteredCSV.trim().split('\n');
-          const header = parseCSVRow(lines[0]);
-          const sampleNames = header.slice(1);
-
-          const geneNames = [];
-          const rawMatrix = [];
-          for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            const parts = parseCSVRow(lines[i]);
-            geneNames.push(parts[0]);
-            rawMatrix.push(parts.slice(1).map(Number));
-          }
-
-          const metaLines = rawMetaCSV.trim().split('\n');
-          const groupMap = {};
-          if (metaLines.length > 0) {
-            const metaHeader = parseCSVRow(metaLines[0]).map(h => h.trim().toLowerCase());
-            let sIdx = metaHeader.findIndex(h => /^(sample|sample_?id|sample_?name|id|name)$/i.test(h));
-            if (sIdx === -1) sIdx = 0;
-            let gIdx = metaHeader.findIndex(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h));
-            if (gIdx === -1) gIdx = metaHeader.length > 1 ? 1 : 0;
-
-            for (let i = 1; i < metaLines.length; i++) {
-              if (!metaLines[i].trim()) continue;
-              const parts = parseCSVRow(metaLines[i]);
-              const s = (parts[sIdx] !== undefined ? parts[sIdx] : parts[0]) || '';
-              const g = (parts[gIdx] !== undefined ? parts[gIdx] : (parts.length > 1 ? parts[1] : '')) || '';
-              if (s.trim()) {
-                groupMap[s.trim()] = g.trim().toLowerCase();
-              }
-            }
-          }
-
-          const activeControlGroup = Storage.getItem('activeControlGroup') || 'Control';
-          const activeTreatedGroup = Storage.getItem('activeTreatedGroup') || 'Treated';
-
-          const uniqueGroups = Array.from(new Set(Object.values(groupMap).map(g => g.toLowerCase()).filter(g => g !== 'exclude' && g !== '')));
-
-          let cGroup = activeControlGroup.toLowerCase();
-          let tGroup = activeTreatedGroup.toLowerCase();
-
-          // Intelligent fallback: if the default groups aren't in this dataset, auto-detect them.
-          if (!uniqueGroups.includes(cGroup) && uniqueGroups.length > 0) {
-              cGroup = uniqueGroups.find(g => g.includes('control') || g.includes('untreated') || g.includes('vehicle')) || uniqueGroups[0];
-          }
-          if (!uniqueGroups.includes(tGroup) && uniqueGroups.length > 1) {
-              tGroup = uniqueGroups.find(g => g !== cGroup && !g.includes('exclude')) || uniqueGroups[1];
-          }
-
-          const controlIndices = [];
-          const treatedIndices = [];
-          sampleNames.forEach((name, idx) => {
-            const matchKey = Object.keys(groupMap).find(k => k === name) ||
-                             Object.keys(groupMap).find(k => k.toLowerCase() === name.toLowerCase());
-            const group = matchKey ? groupMap[matchKey] : '';
-            const gLower = group.toLowerCase();
-            if (gLower === cGroup) {
-              controlIndices.push(idx);
-            } else if (gLower === tGroup) {
-              treatedIndices.push(idx);
-            }
-          });
-
-          // Yield to browser before blocking
-          await new Promise(resolve => setTimeout(resolve, 10));
-          
-          // Check if we already computed this exact dataset
-          const cachedData = Storage.getItem('pipelineData');
-          if (cachedData) {
-            try {
-              const parsed = JSON.parse(cachedData);
-              // Basic validation that cache matches current data length
-              if (parsed && parsed.geneNames && parsed.geneNames.length === geneNames.length) {
-                pData = parsed;
-              }
-            } catch(e) {
-              console.warn('Failed to parse cached pipeline data', e);
-            }
-          }
-          
-          if (!pData) {
-            pData = runAllPipelines(rawMatrix, geneNames, controlIndices, treatedIndices);
-            try {
-              Storage.setItem('pipelineData', JSON.stringify(pData));
-            } catch (e) {
-              console.warn('Could not cache pipelineData (might be too large for storage)', e);
-            }
-          }
+          router.replace('/upload');
+          return;
         }
 
         setPipelineData(pData);
@@ -716,5 +637,13 @@ export default function ConsensusPage() {
         </>
       )}
     </motion.div>
+  );
+}
+
+export default function ConsensusPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: '4rem', textAlign: 'center', fontSize: '1.2rem', color: '#64748b' }}>Loading...</div>}>
+      <ConsensusPageContent />
+    </Suspense>
   );
 }

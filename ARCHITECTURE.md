@@ -5,7 +5,7 @@
 BioInsight 360 is engineered as a **decoupled microservice architecture**:
 
 - **Presentation & Interaction Layer (Frontend):** Next.js (React) SSR/SPA framework deployed on Vercel Edge Networks. Responsible for UI layout, state management, interactive Plotly visualization, client-side DEG parsing, and polling job status.
-- **Orchestration & Validation Layer (Backend API):** Python FastAPI web server running on containerized compute (Google Colab / Docker). Responsible for input profiling, scientific validation, background job tracking, and R subprocess invocation.
+- **Orchestration & Validation Layer (Backend API):** Python FastAPI web server running on containerized compute (Docker / Cloud Provider). Responsible for input profiling, scientific validation, background job tracking, and R subprocess invocation.
 - **Statistical Execution Layer (R Microservices):** Isolated R scripts (`deseq2_script.R`, `edger_script.R`, `limma_script.R`) executing native Bioconductor algorithms.
 
 ---
@@ -51,4 +51,4 @@ BioInsight 360 is engineered as a **decoupled microservice architecture**:
 - **Input Sanitization:** Strips trailing spaces, validates file extensions (`.csv`, `.tsv`), replaces NaNs with zero, and removes special characters in sample names.
 - **Integer Count Check:** Detects non-integer expression data (e.g. TPM/FPKM) and rounds to raw integer counts with a warning, preserving DESeq2 statistical assumptions.
 - **No Shared Global State:** Job results are keyed by UUID4 and isolated in `JobStore`.
-- **CORS & Environment Isolation:** Frontend communicates over HTTPS/WSS via configurable `NEXT_PUBLIC_BACKEND_URL` or custom user-provided Colab ngrok endpoint.
+- **CORS & Environment Isolation:** Frontend communicates over HTTPS/WSS via configurable `NEXT_PUBLIC_BACKEND_URL` endpoint.

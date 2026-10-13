@@ -2,11 +2,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import BioLogo from './BioLogo';
-import ColabBackendModal from './ColabBackendModal';
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <>
@@ -31,26 +29,6 @@ export default function Navbar() {
             <Link href="/qc" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>QC</Link>
             <Link href="#" onClick={(e) => e.preventDefault()} className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Consensus</Link>
             <Link href="#" onClick={(e) => e.preventDefault()} className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Pathways</Link>
-            
-            {/* Colab Server Settings Button */}
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                background: 'rgba(16, 185, 129, 0.1)',
-                color: '#059669',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                padding: '0.35rem 0.75rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              ⚡ Colab Server
-            </button>
           </div>
 
           {/* Mobile Toggle */}
@@ -75,9 +53,6 @@ export default function Navbar() {
           </div>
         )}
       </nav>
-
-      {/* Backend Settings Modal */}
-      <ColabBackendModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </>
   );
 }
