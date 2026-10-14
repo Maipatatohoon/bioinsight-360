@@ -40,6 +40,7 @@ export default function Navbar() {
               </Link>
             ))}
             <BackendSettings />
+            <Link href="/upload" className="nav-cta">Start &rarr;</Link>
           </div>
 
           {/* Mobile Toggle */}
