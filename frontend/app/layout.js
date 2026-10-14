@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'BioInsight 360',
-  description: 'Consensus-Based Multi-Method RNA-Seq Analysis Platform',
+  title: 'BioInsight 360: An Integrated Platform for Multi-method RNA-Seq Analysis, Consensus Differential Expression, and Interpretation',
+  description: 'An integrated platform for multi-method RNA-Seq analysis, consensus differential expression, and interpretation.',
 };
 
 import Navbar from '../components/Navbar';

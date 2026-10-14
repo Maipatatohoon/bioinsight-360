@@ -8,8 +8,8 @@ export default function Home() {
         <h1 style={{ fontSize: 'var(--fs-4xl)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', maxWidth: '850px', margin: '0 auto' }}>
           <span className="text-gradient">BioInsight 360</span>
         </h1>
-        <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 600, color: 'var(--text-primary)', maxWidth: '700px', margin: '0 auto' }}>
-          Easy Gene Data Visualizer & Explorer
+        <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 600, color: 'var(--text-primary)', maxWidth: '820px', margin: '0 auto' }}>
+          An Integrated Platform for Multi-method RNA-Seq Analysis, Consensus Differential Expression, and Interpretation
         </h2>
         <p style={{ fontSize: 'var(--fs-lg)', color: 'var(--text-secondary)', maxWidth: '720px', margin: '0.75rem auto', lineHeight: 1.6 }}>
           Turn complex gene spreadsheets into clear, interactive charts in one click. Compare DESeq2, edgeR, and limma-voom side-by-side to discover robust consensus genes and biological pathways.
