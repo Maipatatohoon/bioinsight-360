@@ -5,6 +5,12 @@ export const metadata = {
   description: 'An integrated platform for multi-method RNA-Seq analysis, consensus differential expression, and interpretation.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#2563eb',
+};
+
 import Navbar from '../components/Navbar';
 import DnaBackground from '../components/DnaBackground';
 
@@ -12,9 +18,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
+        <a href="#main" className="skip-link">Skip to content</a>
         <DnaBackground />
         <Navbar />
-        <main className="main-content">
+        <main id="main" className="main-content">
           {children}
         </main>
         <footer style={{ borderTop: '1px solid var(--border-color)', padding: '2rem 0', textAlign: 'center', marginTop: 'auto', background: 'rgba(241, 245, 249, 0.8)' }}>

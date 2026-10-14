@@ -49,7 +49,7 @@ a {
 }
 
 a:hover {
-  color: #22d3ee;
+  color: #1d4ed8;
 }
 
 /* Scrollbar styling */
@@ -120,8 +120,8 @@ a:hover {
   box-shadow: var(--glow-purple);
 }
 .btn-secondary:hover {
-  background: rgba(139, 92, 246, 0.1);
-  box-shadow: 0 0 25px rgba(139, 92, 246, 0.5);
+  background: rgba(13, 148, 136, 0.08);
+  box-shadow: 0 0 20px rgba(13, 148, 136, 0.28);
 }
 
 .badge {
@@ -595,4 +595,33 @@ a:hover {
   .site-bg .helix, .hero-chip { animation: none !important; }
   .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
   html { scroll-behavior: auto; }
+}
+
+/* Accessibility: visible keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.btn:focus-visible, .hero-cta:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.5);
+  outline-offset: 2px;
+}
+.input-field:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 200;
+  background: #fff;
+  color: var(--accent-primary);
+  padding: 0.6rem 1rem;
+  border-radius: 0 0 8px 0;
+  box-shadow: var(--glass-shadow);
+}
+.skip-link:focus {
+  left: 0;
 }
