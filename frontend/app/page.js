@@ -1,27 +1,6 @@
 import Link from 'next/link';
 import Reveal from '../components/Reveal';
-
-function HeroHelix() {
-  return (
-    <svg viewBox="0 0 220 340" width="100%" height="320" aria-hidden="true" style={{ display: 'block' }}>
-      <defs>
-        <linearGradient id="hero-dna" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#2563eb" />
-          <stop offset="100%" stopColor="#06b6d4" />
-        </linearGradient>
-      </defs>
-      <path d="M60 6 C185 62, 40 118, 160 174 C40 230, 185 286, 60 334"
-        stroke="url(#hero-dna)" strokeWidth="4" fill="none" strokeLinecap="round" />
-      <path d="M160 6 C40 62, 180 118, 60 174 C180 230, 40 286, 160 334"
-        stroke="url(#hero-dna)" strokeWidth="4" fill="none" strokeLinecap="round" />
-      <g stroke="url(#hero-dna)" strokeWidth="2" opacity="0.5">
-        {Array.from({ length: 8 }, (_, i) => 26 + i * 42).map((y) => (
-          <line key={y} x1="66" y1={y} x2="154" y2={y} />
-        ))}
-      </g>
-    </svg>
-  );
-}
+import RnaHero from '../components/RnaHero';
 
 export default function Home() {
   return (
@@ -54,8 +33,8 @@ export default function Home() {
         </div>
 
         <div className="hero-visual">
-          <div className="glass-panel" style={{ padding: '1.5rem', width: '100%', maxWidth: 380 }}>
-            <HeroHelix />
+          <div className="glass-panel" style={{ padding: '1.25rem', width: '100%', maxWidth: 400 }}>
+            <RnaHero />
           </div>
           <div className="hero-chip" style={{ top: 12, left: -6 }}>DESeq2 &check;</div>
           <div className="hero-chip" style={{ top: 62, right: -8, animationDelay: '0.6s' }}>Fleiss &kappa; 0.82</div>
