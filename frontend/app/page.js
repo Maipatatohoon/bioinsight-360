@@ -33,13 +33,20 @@ export default function Home() {
         </div>
 
         <div className="hero-visual">
-          <div className="glass-panel" style={{ padding: '1.25rem', width: '100%', maxWidth: 400 }}>
+          <div className="glass-panel" style={{ padding: '1.25rem', width: '100%', maxWidth: 420 }}>
             <HeroShowcase />
           </div>
-          <div className="hero-chip" style={{ top: 12, left: -6 }}>DESeq2 &check;</div>
-          <div className="hero-chip" style={{ top: 62, right: -8, animationDelay: '0.6s' }}>Fleiss &kappa; 0.82</div>
-          <div className="hero-chip" style={{ bottom: 46, right: -6, animationDelay: '1.2s' }}>edgeR &check;</div>
-          <div className="hero-chip" style={{ bottom: 6, left: 4, animationDelay: '2.1s' }}>limma-voom &check;</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {['DESeq2 \u2713', 'edgeR \u2713', 'limma-voom \u2713', 'Fleiss \u03ba 0.82'].map((label) => (
+              <span
+                key={label}
+                className="glass-panel"
+                style={{ padding: '0.4rem 0.7rem', fontSize: 'var(--fs-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
