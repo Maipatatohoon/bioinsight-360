@@ -28,19 +28,20 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop Nav */}
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }} className="desktop-nav">
-            {LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`nav-link ${isActive(link.href) ? 'active' : ''}`}
-                aria-current={isActive(link.href) ? 'page' : undefined}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }} className="desktop-nav">
+            <div className="nav-track">
+              {LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`nav-link ${isActive(link.href) ? 'active' : ''}`}
+                  aria-current={isActive(link.href) ? 'page' : undefined}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
             <BackendSettings />
-            <Link href="/upload" className="nav-cta">Start &rarr;</Link>
           </div>
 
           {/* Mobile Toggle */}
