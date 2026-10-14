@@ -43,12 +43,9 @@ export default function Home() {
           </div>
         </div>
 
-        <figure style={{ margin: 0, border: '1px solid var(--border-color)', borderRadius: 14, padding: '0.85rem', background: '#ffffff', boxShadow: '0 14px 40px -26px rgba(15, 23, 42, 0.45)' }}>
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: 14, padding: '0.85rem', background: '#ffffff', boxShadow: '0 14px 40px -26px rgba(15, 23, 42, 0.45)' }}>
           <HeroShowcase />
-          <figcaption style={{ textAlign: 'center', fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-            Consensus DEG volcano &middot; PCA &middot; RNA transcription (rotating)
-          </figcaption>
-        </figure>
+        </div>
       </section>
 
       <section className="grid grid-cols-3">
