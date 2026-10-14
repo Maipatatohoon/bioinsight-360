@@ -1,6 +1,6 @@
 'use client';
 
-export default function BioLogo({ size = 34, showText = true }) {
+export default function BioLogo({ size = 34, showText = true, light = false }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none' }}>
       <div style={{ 
@@ -10,9 +10,9 @@ export default function BioLogo({ size = 34, showText = true }) {
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)',
+        background: light ? 'rgba(255, 255, 255, 0.14)' : 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)',
         borderRadius: '10px',
-        border: '1px solid #bfdbfe',
+        border: light ? '1px solid rgba(255, 255, 255, 0.28)' : '1px solid #bfdbfe',
         boxShadow: '0 2px 5px rgba(37, 99, 235, 0.12)'
       }}>
         <svg
@@ -71,8 +71,8 @@ export default function BioLogo({ size = 34, showText = true }) {
       </div>
 
       {showText && (
-        <span style={{ fontWeight: 800, fontSize: '1.3rem', letterSpacing: '-0.03em', color: '#0f172a' }}>
-          Bio<span style={{ color: '#2563eb' }}>Insight</span>
+        <span style={{ fontWeight: 800, fontSize: '1.3rem', letterSpacing: '-0.03em', color: light ? '#ffffff' : '#0f172a' }}>
+          Bio<span style={{ color: light ? '#7dd3fc' : '#2563eb' }}>Insight</span>
           <span style={{ 
             marginLeft: '0.4rem', 
             fontSize: '0.75rem', 

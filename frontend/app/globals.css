@@ -678,6 +678,76 @@ a:hover {
   .rna-hero .pol, .rna-hero .pol-core { display: none; }
 }
 
+/* Cinematic navbar + hero */
+.nav-cinema {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: linear-gradient(120deg, #0b1224 0%, #111a3a 55%, #0c2540 100%);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 8px 28px -16px rgba(2, 6, 23, 0.75);
+}
+.nav-cinema .nav-link { color: rgba(203, 213, 225, 0.82); }
+.nav-cinema .nav-link:hover { color: #ffffff; }
+.nav-cinema .nav-link.active { color: #ffffff; }
+
+.hero-cinema {
+  position: relative;
+  overflow: hidden;
+  color: #e8eeff;
+  background: radial-gradient(120% 130% at 82% -10%, #1b2a54 0%, #0b1224 52%, #080e20 100%);
+  padding: 4.5rem 0 4rem;
+  margin-bottom: 3rem;
+}
+.hero-cinema .blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.hero-cinema .blob.a {
+  width: 520px; height: 520px; top: -170px; right: -90px;
+  background: radial-gradient(circle, #2563eb, transparent 70%);
+  animation: blob-float-a 16s ease-in-out infinite;
+}
+.hero-cinema .blob.b {
+  width: 460px; height: 460px; bottom: -200px; left: -120px;
+  background: radial-gradient(circle, #06b6d4, transparent 70%);
+  animation: blob-float-b 20s ease-in-out infinite;
+}
+@keyframes blob-float-a { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-30px, 22px); } }
+@keyframes blob-float-b { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(32px, -20px); } }
+.hero-cinema .grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(85% 75% at 50% 25%, #000 25%, transparent 100%);
+  mask-image: radial-gradient(85% 75% at 50% 25%, #000 25%, transparent 100%);
+  pointer-events: none;
+}
+.hero-cinema .hero-eyebrow {
+  color: #93c5fd;
+  background: rgba(147, 197, 253, 0.12);
+  border-color: rgba(147, 197, 253, 0.3);
+}
+.hero-cinema .hero-title { color: #ffffff; }
+.hero-cinema .text-gradient {
+  background: linear-gradient(135deg, #60a5fa, #22d3ee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero-cinema .hero-stat .num { color: #ffffff; }
+.hero-cinema .hero-stat .lbl { color: #93a4c8; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-cinema .blob { animation: none; }
+}
+
 /* Navbar links */
 .nav-link {
   position: relative;

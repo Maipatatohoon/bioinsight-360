@@ -11,7 +11,7 @@ import {
   checkBackendHealth,
 } from '../lib/backend_api';
 
-export default function BackendSettings() {
+export default function BackendSettings({ light = false }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [url, setUrl] = useState('');
@@ -63,12 +63,12 @@ export default function BackendSettings() {
     display: 'inline-flex',
     alignItems: 'center',
     background: 'transparent',
-    border: '1px solid #e2e8f0',
+    border: light ? '1px solid rgba(226, 232, 240, 0.35)' : '1px solid #e2e8f0',
     borderRadius: 8,
     padding: '0.35rem 0.6rem',
     cursor: 'pointer',
     font: 'inherit',
-    color: 'var(--text-secondary)',
+    color: light ? '#e8eeff' : 'var(--text-secondary)',
   };
 
   return (

@@ -21,10 +21,10 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="nav-glass" style={{ padding: '0.75rem 0' }}>
+      <nav className="nav-cinema" style={{ padding: '0.75rem 0' }}>
         <div className="container flex justify-between items-center">
           <Link href="/" style={{ textDecoration: 'none' }} aria-label="BioInsight 360 home">
-            <BioLogo />
+            <BioLogo light />
           </Link>
 
           {/* Desktop Nav */}
@@ -39,7 +39,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <BackendSettings />
+            <BackendSettings light />
           </div>
 
           {/* Mobile Toggle */}
@@ -48,7 +48,7 @@ export default function Navbar() {
             aria-label="Toggle navigation menu"
             aria-expanded={isMobileMenuOpen}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1.5rem', cursor: 'pointer', display: 'none' }}
+            style={{ background: 'transparent', border: 'none', color: '#e8eeff', fontSize: '1.5rem', cursor: 'pointer', display: 'none' }}
           >
             ☰
           </button>
