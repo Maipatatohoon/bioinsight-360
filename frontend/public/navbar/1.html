@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Navbar 1 — Blended pills</title>
+<style>
+body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a;background:#fff}
+.nav{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:12px 28px;background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border-bottom:1px solid rgba(226,232,240,.6)}
+.nav::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(37,99,235,.45) 30%,rgba(6,182,212,.45) 70%,transparent)}
+.brand{font-weight:800;letter-spacing:-.02em}.brand span{color:#2563eb}
+.links{display:flex;align-items:center;gap:6px}
+.a{color:#334155;font-weight:500;padding:7px 12px;border-radius:999px;text-decoration:none;font-size:14px;transition:.2s}
+.a:hover{color:#2563eb;background:rgba(37,99,235,.06)}
+.active{color:#2563eb;font-weight:600;background:linear-gradient(135deg,rgba(37,99,235,.12),rgba(6,182,212,.12))}
+.cta{background:linear-gradient(135deg,#2563eb,#06b6d4);color:#fff;font-weight:600;font-size:14px;padding:8px 16px;border-radius:999px;text-decoration:none;box-shadow:0 6px 18px -8px rgba(37,99,235,.7)}
+.body{max-width:960px;margin:0 auto;padding:40px 28px;color:#64748b}
+</style></head>
+<body>
+<nav class="nav">
+  <div class="brand">Bio<span>Insight</span> 360</div>
+  <div class="links">
+    <a class="a" href="#">Upload</a><a class="a" href="#">QC</a><a class="a active" href="#">Consensus</a><a class="a" href="#">Pathways</a><a class="a" href="#">Export</a>
+    <a class="cta" href="#">Start &rarr;</a>
+  </div>
+</nav>
+<div class="body">Variant 1 — active link is a soft blue→cyan tint pill; the bottom hairline fades out at both edges so it blends.</div>
+</body></html>

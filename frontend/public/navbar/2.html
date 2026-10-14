@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Navbar 2 — Soft underline</title>
+<style>
+body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a;background:#fff}
+.nav{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:rgba(255,255,255,.75);backdrop-filter:blur(16px);border-bottom:1px solid rgba(226,232,240,.55)}
+.brand{font-weight:800;letter-spacing:-.02em}.brand span{color:#2563eb}
+.links{display:flex;align-items:center;gap:22px}
+.a{position:relative;color:#475569;font-weight:500;font-size:14px;text-decoration:none;padding:4px 0}
+.a:hover{color:#2563eb}
+.a.active{color:#2563eb;font-weight:600}
+.a.active::after{content:'';position:absolute;left:50%;transform:translateX(-50%);bottom:-9px;width:22px;height:4px;border-radius:999px;background:linear-gradient(90deg,#2563eb,#06b6d4);opacity:.5}
+.cta{background:linear-gradient(135deg,#2563eb,#06b6d4);color:#fff;font-weight:600;font-size:14px;padding:8px 16px;border-radius:999px;text-decoration:none;box-shadow:0 6px 18px -8px rgba(37,99,235,.7)}
+.body{max-width:960px;margin:0 auto;padding:40px 28px;color:#64748b}
+</style></head>
+<body>
+<nav class="nav">
+  <div class="brand">Bio<span>Insight</span> 360</div>
+  <div class="links">
+    <a class="a" href="#">Upload</a><a class="a" href="#">QC</a><a class="a active" href="#">Consensus</a><a class="a" href="#">Pathways</a><a class="a" href="#">Export</a>
+    <a class="cta" href="#">Start &rarr;</a>
+  </div>
+</nav>
+<div class="body">Variant 2 — plain links, and the active link gets a short rounded gradient underline (no full-width line). Blends softly.</div>
+</body></html>

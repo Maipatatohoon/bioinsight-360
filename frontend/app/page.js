@@ -5,22 +5,24 @@ export default function Home() {
   return (
     <div className="container" style={{ padding: '4rem 1.5rem' }}>
       {/* Hero Section */}
-      <section className="fade-in" style={{ textAlign: 'center', margin: '4rem 0 5rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem' }}>
-        <h1 style={{ fontSize: 'var(--fs-4xl)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', maxWidth: '850px', margin: '0 auto' }}>
-          <span className="text-gradient">BioInsight 360</span>
-        </h1>
-        <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 600, color: 'var(--text-primary)', maxWidth: '820px', margin: '0 auto' }}>
-          An Integrated Platform for Multi-method RNA-Seq Analysis, Consensus Differential Expression, and Interpretation
-        </h2>
-        <p style={{ fontSize: 'var(--fs-lg)', color: 'var(--text-secondary)', maxWidth: '720px', margin: '0.75rem auto', lineHeight: 1.6 }}>
-          Turn complex gene spreadsheets into clear, interactive charts in one click. Compare DESeq2, edgeR, and limma-voom side-by-side to discover robust consensus genes and biological pathways.
-        </p>
-        <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Link href="/upload" className="btn btn-primary" style={{ fontSize: 'var(--fs-lg)', padding: '0.85rem 2rem' }}>
-            Upload File & Start &rarr;
-          </Link>
+      <section className="fade-in hero-grid" style={{ margin: '3rem 0 5rem 0' }}>
+        <div>
+          <h1 style={{ fontSize: 'var(--fs-4xl)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', margin: '0 0 1rem' }}>
+            <span className="text-gradient">BioInsight 360</span>
+          </h1>
+          <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.75rem' }}>
+            An Integrated Platform for Multi-method RNA-Seq Analysis, Consensus Differential Expression, and Interpretation
+          </h2>
+          <p style={{ fontSize: 'var(--fs-lg)', color: 'var(--text-secondary)', margin: '0 0 1.5rem', lineHeight: 1.6 }}>
+            Turn complex gene spreadsheets into clear, interactive charts in one click. Compare DESeq2, edgeR, and limma-voom side-by-side to discover robust consensus genes and biological pathways.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <Link href="/upload" className="btn btn-primary" style={{ fontSize: 'var(--fs-lg)', padding: '0.85rem 2rem' }}>
+              Upload File & Start &rarr;
+            </Link>
+          </div>
         </div>
-        <div style={{ width: '100%', maxWidth: 520, marginTop: '1.75rem', padding: '0.75rem', background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 14, boxShadow: '0 12px 34px -22px rgba(15, 23, 42, 0.4)' }}>
+        <div style={{ width: '100%', padding: '0.75rem', background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 14, boxShadow: '0 14px 40px -26px rgba(15, 23, 42, 0.45)' }}>
           <HeroShowcase />
         </div>
       </section>
