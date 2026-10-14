@@ -62,6 +62,9 @@ python backend/workers/colab_worker.py
 | `BIOINSIGHT_BACKEND_URL` | Worker | `http://localhost:8000` | Backend the worker polls. |
 | `BIOINSIGHT_WORKER_TOKEN` | Backend + worker | `dev-token-123` | **Change in production.** Shared bearer token. |
 | `BIOINSIGHT_DB_PATH` | Backend | `backend/data/bioinsight_jobs.db` | SQLite job DB location. |
+| `BIOINSIGHT_RUNTIME` | Backend | `colab` | `colab` = wait for a remote worker; `local` = run R engines on this machine (needs `Rscript`). |
+| `BIOINSIGHT_ALLOWED_ORIGINS` | Backend | localhost | Comma-separated CORS origins. |
+| `BIOINSIGHT_ENV` | Backend | `development` | `production` refuses to start with the default token. |
 
 ## Local development
 
