@@ -33,19 +33,8 @@ export default function Home() {
         </div>
 
         <div className="hero-visual">
-          <div className="glass-panel" style={{ padding: '1.25rem', width: '100%', maxWidth: 420 }}>
+          <div className="glass-panel" style={{ padding: '1.25rem', width: '100%' }}>
             <HeroShowcase />
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {['DESeq2 \u2713', 'edgeR \u2713', 'limma-voom \u2713', 'Fleiss \u03ba 0.82'].map((label) => (
-              <span
-                key={label}
-                className="glass-panel"
-                style={{ padding: '0.4rem 0.7rem', fontSize: 'var(--fs-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}
-              >
-                {label}
-              </span>
-            ))}
           </div>
         </div>
       </section>
