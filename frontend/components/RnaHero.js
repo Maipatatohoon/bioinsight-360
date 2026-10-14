@@ -49,10 +49,10 @@ export default function RnaHero() {
         </g>
 
         <circle className="pol" r="8" fill="#0ea5e9">
-          <animateMotion dur="3.6s" repeatCount="indefinite" path={strand} />
+          <animateMotion dur="2.2s" repeatCount="indefinite" path={strand} />
         </circle>
         <circle className="pol-core" r="4" fill="#ffffff">
-          <animateMotion dur="3.6s" repeatCount="indefinite" path={strand} />
+          <animateMotion dur="2.2s" repeatCount="indefinite" path={strand} />
         </circle>
       </svg>
     </div>

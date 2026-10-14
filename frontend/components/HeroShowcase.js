@@ -71,7 +71,7 @@ export default function HeroShowcase() {
 
   useEffect(() => {
     if (!auto) return;
-    const t = setInterval(() => setIdx((i) => (i + 1) % SLIDES.length), 5000);
+    const t = setInterval(() => setIdx((i) => (i + 1) % SLIDES.length), 3000);
     return () => clearInterval(t);
   }, [auto]);
 

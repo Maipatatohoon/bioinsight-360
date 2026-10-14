@@ -650,9 +650,9 @@ a:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
   font-size: 13px;
-  animation: rna-fall 4.2s linear infinite;
+  animation: rna-fall 2.6s linear infinite;
 }
-.rna-hero .rna-col span { opacity: 0.16; }
+.rna-hero .rna-col span { opacity: 0.3; }
 @keyframes rna-fall {
   from { transform: translateY(-30px); }
   to   { transform: translateY(30px); }
@@ -666,7 +666,7 @@ a:hover {
   width: 100%;
   height: auto;
 }
-.rna-hero .rung { animation: rung-pulse 1.8s ease-in-out infinite; }
+.rna-hero .rung { animation: rung-pulse 1.2s ease-in-out infinite; }
 @keyframes rung-pulse {
   0%, 100% { opacity: 0.15; }
   50% { opacity: 0.9; }
@@ -720,10 +720,11 @@ a:hover {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.8s ease;
+  transition: opacity 0.3s ease;
   padding: 0.75rem 0.75rem 2.25rem;
+  pointer-events: none;
 }
-.showcase-slide.is-active { opacity: 1; }
+.showcase-slide.is-active { opacity: 1; pointer-events: auto; }
 .showcase-slide svg { width: 100%; height: 100%; }
 .showcase-caption {
   position: absolute;
