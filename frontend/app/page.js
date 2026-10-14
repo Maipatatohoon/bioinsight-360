@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import HeroShowcase from '../components/HeroShowcase';
 
 export default function Home() {
   return (
@@ -18,6 +19,9 @@ export default function Home() {
           <Link href="/upload" className="btn btn-primary" style={{ fontSize: 'var(--fs-lg)', padding: '0.85rem 2rem' }}>
             Upload File & Start &rarr;
           </Link>
+        </div>
+        <div style={{ width: '100%', maxWidth: 520, marginTop: '1.75rem', padding: '0.75rem', background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 14, boxShadow: '0 12px 34px -22px rgba(15, 23, 42, 0.4)' }}>
+          <HeroShowcase />
         </div>
       </section>
 
