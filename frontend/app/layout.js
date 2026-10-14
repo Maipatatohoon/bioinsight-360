@@ -6,11 +6,13 @@ export const metadata = {
 };
 
 import Navbar from '../components/Navbar';
+import DnaBackground from '../components/DnaBackground';
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
+        <DnaBackground />
         <Navbar />
         <main className="main-content">
           {children}

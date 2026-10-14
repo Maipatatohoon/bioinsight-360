@@ -47,3 +47,6 @@ next-env.d.ts
 # The backend is its own repository (bioinsight-backend); do not track it as a
 # broken submodule pointer here.
 /backend/
+
+# Superpowers visual-companion scratch
+.superpowers/

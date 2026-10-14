@@ -9,16 +9,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav style={{ 
-        position: 'sticky', 
-        top: 0, 
-        zIndex: 50, 
-        background: 'rgba(255, 255, 255, 0.95)', 
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '0.85rem 0'
-      }}>
+      <nav className="nav-glass" style={{ padding: '0.85rem 0' }}>
         <div className="container flex justify-between items-center">
           <Link href="/" style={{ textDecoration: 'none' }}>
             <BioLogo />
