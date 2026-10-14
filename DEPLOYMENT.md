@@ -36,17 +36,37 @@ talks only to these routes (already implemented in `frontend/lib/backend_api.js`
 
 ## Production path — host the backend
 
-The repo ships `backend/Dockerfile` (Python 3.10 + R + Bioconductor, exposes port 7860):
+The backend ships a Docker image (`backend/Dockerfile`: Python 3.10 + R + Bioconductor
+`DESeq2/edgeR/limma`, non-root, healthcheck, port **7860**) and a `docker-compose.yml`.
+
+**Docker Compose (easiest):**
+
+```sh
+cd backend
+BIOINSIGHT_WORKER_TOKEN=<strong-secret> docker compose up --build
+# -> http://localhost:7860/health
+```
+
+**Plain Docker:**
 
 ```sh
 docker build -t bioinsight-backend ./backend
 docker run -p 7860:7860 \
   -e BIOINSIGHT_WORKER_TOKEN=<strong-secret> \
-  -e BIOINSIGHT_DB_PATH=/data/jobs.db -v bioinsight-data:/data \
+  -e BIOINSIGHT_ENV=production \
+  -v bioinsight-data:/data \
   bioinsight-backend
 ```
 
-Then run the worker anywhere with `Rscript` available:
+**Managed hosts:** the image runs as-is on **Hugging Face Spaces** (Docker SDK, port 7860),
+**Render**, **Fly.io**, **Railway**, or any VM. Set `BIOINSIGHT_WORKER_TOKEN` (and
+`BIOINSIGHT_ENV=production`) as secrets, and mount a volume at **`/data`** so the SQLite
+job DB survives restarts.
+
+By default jobs wait for a worker (`BIOINSIGHT_RUNTIME=colab`). To run the R engines
+inside the container itself, set `BIOINSIGHT_RUNTIME=local` (the image already has R).
+
+Then run the worker anywhere with `Rscript` available (e.g. the Colab notebook):
 
 ```sh
 export BIOINSIGHT_BACKEND_URL=https://your-backend-host
