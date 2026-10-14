@@ -1,15 +1,10 @@
 import Link from 'next/link';
 import HeroShowcase from '../components/HeroShowcase';
 
-const CARDS = [
-  { n: '1', t: 'Multi-tool consensus', d: 'Highlight only genes verified across DESeq2, edgeR and limma.' },
-  { n: '2', t: 'Agreement metrics', d: "Jaccard, overlap coefficient and Fleiss' \u03ba between methods." },
-  { n: '3', t: 'Pathway stability', d: 'GO pathways that stay enriched no matter the pipeline.' },
-];
-
 export default function Home() {
   return (
     <div className="container" style={{ padding: '2.5rem 1.5rem 4rem' }}>
+      {/* Hero */}
       <section className="hero-grid fade-in" style={{ margin: '1rem 0 4rem' }}>
         <div>
           <span style={{ display: 'inline-block', fontSize: 'var(--fs-xs)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent-primary)', marginBottom: '1rem' }}>
@@ -48,16 +43,97 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="grid grid-cols-3">
-        {CARDS.map((c) => (
-          <div key={c.t} className="glass-card" style={{ padding: '1.5rem' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, marginBottom: '0.75rem' }}>
-              {c.n}
+      {/* 3-Step Workflow */}
+      <section className="glass-card" style={{ marginBottom: '3rem', padding: '2.5rem' }}>
+        <h2 className="section-title text-center" style={{ marginBottom: '0.5rem' }}>How BioInsight 360 Works</h2>
+        <p className="text-center" style={{ color: 'var(--text-muted)', marginBottom: '2.5rem' }}>Three simple steps from raw gene data to publication-ready insights</p>
+
+        <div className="grid grid-cols-3 gap-6">
+          <div className="glass-card text-center flex flex-col items-center gap-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 800 }}>
+              1
             </div>
-            <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, margin: '0 0 0.35rem', color: 'var(--text-primary)' }}>{c.t}</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0, lineHeight: 1.5 }}>{c.d}</p>
+            <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>📥 Upload File</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              Drag &amp; drop your DESeq2, edgeR, or Excel CSV result table. Our smart profiler checks it for formatting errors instantly.
+            </p>
           </div>
-        ))}
+
+          <div className="glass-card text-center flex flex-col items-center gap-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ccfbf1', color: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 800 }}>
+              2
+            </div>
+            <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>📊 Instant Charts</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              Get interactive Volcano Plots, Heatmaps, and MA plots instantly — no R or Python coding required.
+            </p>
+          </div>
+
+          <div className="glass-card text-center flex flex-col items-center gap-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 800 }}>
+              3
+            </div>
+            <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>🎯 Find Key Genes</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              Filter top differentially expressed genes and discover the biological pathways they control.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Cards */}
+      <section className="grid grid-cols-3" style={{ marginBottom: '3rem' }}>
+        <div className="glass-card text-center flex flex-col items-center gap-4">
+          <div style={{ width: '56px', height: '56px', borderRadius: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+            <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <line x1="10" y1="9" x2="8" y2="9" />
+            </svg>
+          </div>
+          <h3 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, color: 'var(--text-primary)' }}>Multi-Tool Consensus</h3>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Compare DESeq2, edgeR, and limma-voom to highlight high-confidence genes verified across methods.
+          </p>
+        </div>
+        <div className="glass-card text-center flex flex-col items-center gap-4">
+          <div style={{ width: '56px', height: '56px', borderRadius: '12px', background: '#ccfbf1', border: '1px solid #99f6e4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d9488' }}>
+            <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+          </div>
+          <h3 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, color: 'var(--text-primary)' }}>Interactive Visuals</h3>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Filter log2FoldChange and adjusted p-values dynamically with real-time Plotly charts.
+          </p>
+        </div>
+        <div className="glass-card text-center flex flex-col items-center gap-4">
+          <div style={{ width: '56px', height: '56px', borderRadius: '12px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+            <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <h3 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, color: 'var(--text-primary)' }}>Cloud &amp; Local Execution</h3>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Instantly interpret DEG CSV files in your browser, or connect to our Python/R backend engine for raw counts.
+          </p>
+        </div>
+      </section>
+
+      {/* Tech Stack */}
+      <section className="text-center fade-in" style={{ animationDelay: '0.3s', marginBottom: '2rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Powered By</p>
+        <div className="flex justify-center items-center gap-4 flex-wrap">
+          <span className="badge badge-ns">Next.js</span>
+          <span className="badge badge-ns">FastAPI</span>
+          <span className="badge badge-ns">Bioconductor DESeq2</span>
+          <span className="badge badge-ns">Plotly.js</span>
+        </div>
       </section>
     </div>
   );
