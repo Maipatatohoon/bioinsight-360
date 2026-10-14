@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Reveal from '../components/Reveal';
-import RnaHero from '../components/RnaHero';
+import HeroShowcase from '../components/HeroShowcase';
 
 export default function Home() {
   return (
@@ -34,7 +34,7 @@ export default function Home() {
 
         <div className="hero-visual">
           <div className="glass-panel" style={{ padding: '1.25rem', width: '100%', maxWidth: 400 }}>
-            <RnaHero />
+            <HeroShowcase />
           </div>
           <div className="hero-chip" style={{ top: 12, left: -6 }}>DESeq2 &check;</div>
           <div className="hero-chip" style={{ top: 62, right: -8, animationDelay: '0.6s' }}>Fleiss &kappa; 0.82</div>

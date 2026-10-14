@@ -1,32 +1,49 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import BioLogo from './BioLogo';
 import BackendSettings from './BackendSettings';
 
+const LINKS = [
+  { href: '/upload', label: 'Upload' },
+  { href: '/qc', label: 'QC' },
+  { href: '/consensus', label: 'Consensus' },
+  { href: '/pathways', label: 'Pathways' },
+  { href: '/export', label: 'Export' },
+];
+
 export default function Navbar() {
+  const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const isActive = (href) => pathname === href || (pathname && pathname.startsWith(`${href}/`));
 
   return (
     <>
-      <nav className="nav-glass" style={{ padding: '0.85rem 0' }}>
+      <nav className="nav-glass" style={{ padding: '0.75rem 0' }}>
         <div className="container flex justify-between items-center">
-          <Link href="/" style={{ textDecoration: 'none' }}>
+          <Link href="/" style={{ textDecoration: 'none' }} aria-label="BioInsight 360 home">
             <BioLogo />
           </Link>
 
           {/* Desktop Nav */}
           <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }} className="desktop-nav">
-            <Link href="/upload" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Upload</Link>
-            <Link href="/qc" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>QC</Link>
-            <Link href="/consensus" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Consensus</Link>
-            <Link href="/pathways" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Pathways</Link>
-            <Link href="/export" className="nav-link" style={{ color: 'var(--text-secondary)', fontWeight: 500, transition: 'color 0.3s' }}>Export</Link>
+            {LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`nav-link ${isActive(link.href) ? 'active' : ''}`}
+                aria-current={isActive(link.href) ? 'page' : undefined}
+              >
+                {link.label}
+              </Link>
+            ))}
             <BackendSettings />
           </div>
 
           {/* Mobile Toggle */}
-          <button 
+          <button
             className="mobile-toggle"
             aria-label="Toggle navigation menu"
             aria-expanded={isMobileMenuOpen}
@@ -41,11 +58,16 @@ export default function Navbar() {
         {isMobileMenuOpen && (
           <div className="mobile-nav" style={{ padding: '1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
             <div className="flex flex-col gap-4">
-              <Link href="/upload" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Upload</Link>
-              <Link href="/qc" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>QC</Link>
-              <Link href="/consensus" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Consensus</Link>
-              <Link href="/pathways" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Pathways</Link>
-              <Link href="/export" onClick={() => setIsMobileMenuOpen(false)} style={{ color: 'var(--text-primary)' }}>Export</Link>
+              {LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`nav-link ${isActive(link.href) ? 'active' : ''}`}
+                >
+                  {link.label}
+                </Link>
+              ))}
               <BackendSettings />
             </div>
           </div>
