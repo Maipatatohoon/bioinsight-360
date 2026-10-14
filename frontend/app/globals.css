@@ -527,8 +527,8 @@ a:hover {
 /* Split hero */
 .hero-split {
   display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: 2.5rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
   align-items: center;
 }
 .hero-eyebrow {
@@ -562,7 +562,7 @@ a:hover {
 .hero-stats { display: flex; gap: 1.75rem; margin-top: 2rem; flex-wrap: wrap; }
 .hero-stat .num { font-size: var(--fs-xl); font-weight: 800; color: var(--text-primary); }
 .hero-stat .lbl { font-size: var(--fs-xs); color: var(--text-muted); }
-.hero-visual { position: relative; display: flex; align-items: center; justify-content: center; min-height: 360px; }
+.hero-visual { position: relative; display: flex; align-items: center; justify-content: center; }
 .hero-chip {
   position: absolute;
   background: var(--glass-strong);
@@ -630,8 +630,8 @@ a:hover {
 .rna-hero {
   position: relative;
   width: 100%;
-  aspect-ratio: 5 / 4;
-  border-radius: 14px;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
   overflow: hidden;
   background: radial-gradient(120% 90% at 50% 8%, #f4f7ff 0%, #e9eefb 55%, #e4ecff 100%);
 }
@@ -778,8 +778,9 @@ a:hover {
 .showcase {
   position: relative;
   width: 100%;
-  aspect-ratio: 5 / 4;
-  border-radius: 14px;
+  aspect-ratio: 16 / 10;
+  max-height: 290px;
+  border-radius: 12px;
   overflow: hidden;
   background: radial-gradient(120% 90% at 50% 8%, #f4f7ff 0%, #e9eefb 55%, #e4ecff 100%);
 }
