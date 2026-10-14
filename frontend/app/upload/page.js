@@ -324,11 +324,14 @@ export default function UploadPage() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}
         >
-            <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', background: 'linear-gradient(to right, #0284c7, #0d9488)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 700 }}>
-                Upload & Dataset Configuration
-            </h1>
+            <div className="page-header">
+                <span className="page-eyebrow">Step 1 · Data</span>
+                <h1 className="page-title">
+                    Upload &amp; Dataset Configuration
+                </h1>
+            </div>
             
-            <div style={{ background: '#ffffff', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <div className="glass-panel" style={{ padding: '2rem' }}>
                 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '2rem' }}>

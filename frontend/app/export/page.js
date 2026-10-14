@@ -328,9 +328,10 @@ export default function ExportPage() {
   return (
     <div style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Page Header */}
-      <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '2rem', background: 'linear-gradient(to right, #d97706, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-        Export Results & Analysis Report
-      </h1>
+      <div className="page-header">
+        <span className="page-eyebrow">Export</span>
+        <h1 className="page-title">Export Results &amp; Analysis Report</h1>
+      </div>
 
       {/* Action Buttons */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '3rem' }}>

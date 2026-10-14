@@ -198,7 +198,8 @@ function ConsensusPageContent() {
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', background: 'linear-gradient(to right, #e11d48, #d97706)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+          <span className="page-eyebrow">Consensus</span>
+          <h1 className="page-title">
             {analysisMode === 'downstream' ? 'Downstream Integration Dashboard' : 'Multi-Method Consensus DGE Analysis'}
           </h1>
           <p style={{ color: '#1e293b', fontSize: '1rem', marginTop: '0.5rem' }}>

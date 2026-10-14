@@ -135,7 +135,8 @@ export default function QCPage() {
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', background: 'linear-gradient(to right, #059669, #0284c7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+          <span className="page-eyebrow">Quality Control</span>
+          <h1 className="page-title">
             Quality Control Dashboard
           </h1>
           <p style={{ color: '#1e293b', fontSize: '1rem', marginTop: '0.5rem' }}>
