@@ -10,6 +10,7 @@ import {
   clearBackendUrl,
   checkBackendHealth,
 } from '../lib/backend_api';
+import { parseBackendFromSearch, stripBackendFromSearch } from '../lib/backendUrl.mjs';
 
 export default function BackendSettings({ light = false }) {
   const [open, setOpen] = useState(false);
@@ -18,9 +19,22 @@ export default function BackendSettings({ light = false }) {
   const [active, setActive] = useState('');
   const [status, setStatus] = useState('unknown'); // unknown | checking | connected | error
   const [message, setMessage] = useState('');
+  const [fromLink, setFromLink] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    // A shared demo link can carry ?backend=<url>. Apply it once and drop the
+    // parameter so the address bar stays clean and the choice is remembered.
+    const linked = parseBackendFromSearch(window.location.search);
+    if (linked) {
+      setBackendUrl(linked);
+      setFromLink(true);
+      window.history.replaceState(
+        {},
+        '',
+        `${window.location.pathname}${stripBackendFromSearch(window.location.search)}${window.location.hash}`
+      );
+    }
     const current = getBackendUrl();
     setUrl(current);
     setActive(current);
@@ -98,6 +112,11 @@ export default function BackendSettings({ light = false }) {
           <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 8px' }}>
             Paste your Colab tunnel URL (e.g. https://xxxx.trycloudflare.com). Saved in this browser; no redeploy needed.
           </p>
+          {fromLink && (
+            <p style={{ fontSize: '0.72rem', color: '#0369a1', margin: '0 0 8px' }}>
+              Loaded from a shared link. Check the address before uploading data.
+            </p>
+          )}
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}

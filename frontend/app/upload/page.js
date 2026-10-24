@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { fetchGeoMetadata } from '../../lib/geo_api';
 import { motion } from 'framer-motion';
-import { submitAnalysisJob } from '../../lib/backend_api';
+import { submitAnalysisJob, getBackendUrl } from '../../lib/backend_api';
 
 export function processCountMatrix(rawText) {
     if (!rawText || !rawText.trim()) {
@@ -844,7 +844,18 @@ export default function UploadPage() {
                                     
                                     router.push('/qc');
                                 } catch (e) {
-                                    alert("Analysis submission failed: " + e.message);
+                                    const networkFailure =
+                                        e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(e.message || '');
+                                    if (networkFailure) {
+                                        alert(
+                                            `Cannot reach the analysis backend at:\n${getBackendUrl()}\n\n` +
+                                            'The backend is not running, or this deployment has no default backend configured.\n\n' +
+                                            'Open “Backend” in the navbar, paste the live backend URL, and press “Test & Save”. ' +
+                                            'Pre-computed DEG mode does not need a backend.'
+                                        );
+                                    } else {
+                                        alert("Analysis submission failed: " + e.message);
+                                    }
                                 } finally {
                                     setLoading(false);
                                 }

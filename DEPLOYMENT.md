@@ -74,6 +74,22 @@ export BIOINSIGHT_WORKER_TOKEN=<same-secret>
 python backend/workers/colab_worker.py
 ```
 
+## Pointing the deployed site at a backend
+
+A Colab tunnel URL changes every session, so the deployed build cannot hardcode it. There
+are two ways to connect, and the per-browser choice always wins over the build-time default:
+
+1. **Shareable link (no redeploy).** Open
+   `https://bioinsight-360.vercel.app/?backend=<backend-url>`. The app adopts that backend,
+   stores it in the browser, and removes the parameter from the address bar. Cell **4b** of
+   the Colab runbook prints this link ready to click, so it can be shared with an examiner
+   while the notebook runs.
+2. **Build-time default.** Set `NEXT_PUBLIC_BACKEND_URL` in Vercel → Settings →
+   Environment Variables and redeploy (`NEXT_PUBLIC_*` is baked in at build time).
+
+**Reset** in the navbar *Backend* popover clears the browser override and falls back to the
+build-time default.
+
 ## Environment variables
 
 | Variable | Used by | Default | Notes |

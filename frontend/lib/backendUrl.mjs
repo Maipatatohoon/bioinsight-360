@@ -16,6 +16,38 @@ export function resolveBackendUrl(stored, fallback) {
   return chosen.replace(/\/+$/, '') || FALLBACK;
 }
 
+/**
+ * Read a backend URL from a query string such as `?backend=https://abc.example`.
+ * Returns null for anything that is not an absolute http(s) URL, so a malformed
+ * or relative value can never silently become the active backend.
+ */
+export function parseBackendFromSearch(search) {
+  if (!search || typeof search !== 'string') return null;
+  let raw;
+  try {
+    raw = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('backend');
+  } catch {
+    return null;
+  }
+  const value = (raw ?? '').toString().trim();
+  if (!/^https?:\/\//i.test(value)) return null;
+  try {
+    const parsed = new URL(value);
+    if (!parsed.hostname) return null;
+  } catch {
+    return null;
+  }
+  return value.replace(/\/+$/, '');
+}
+
+/** Remove the `backend` parameter from a query string, preserving the rest. */
+export function stripBackendFromSearch(search) {
+  const params = new URLSearchParams((search || '').replace(/^\?/, ''));
+  params.delete('backend');
+  const rest = params.toString();
+  return rest ? `?${rest}` : '';
+}
+
 export function readStoredBackendUrl() {
   if (typeof window === 'undefined') return null;
   try {
