@@ -829,10 +829,21 @@ export default function UploadPage() {
                                     const countsBlob = new Blob([countsStr], { type: 'text/csv' });
                                     const metadataBlob = new Blob([metaStr], { type: 'text/csv' });
                                     
+                                    // The frontend always canonicalises metadata to {Sample, Group}.
+                                    // Without an explicit design the backend defaults to "~ condition",
+                                    // which does not exist -> every R engine fails. Send the real
+                                    // column name and an explicit treated-vs-control contrast.
+                                    const safeLevel = /^[A-Za-z0-9.]+$/;
                                     const params = {
                                         control_group: selectedCtrl,
-                                        treated_group: selectedTrt
+                                        treated_group: selectedTrt,
+                                        condition_col: 'Group',
+                                        design: '~ Group'
                                     };
+                                    if (safeLevel.test(selectedTrt) && safeLevel.test(selectedCtrl)) {
+                                        // R scripts parse "<factor>_<numerator>_vs_<denominator>".
+                                        params.contrast = `Group_${selectedTrt}_vs_${selectedCtrl}`;
+                                    }
                                     
                                     const jobRes = await submitAnalysisJob(countsBlob, metadataBlob, params);
                                     
