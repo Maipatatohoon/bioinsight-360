@@ -829,20 +829,20 @@ export default function UploadPage() {
                                     const countsBlob = new Blob([countsStr], { type: 'text/csv' });
                                     const metadataBlob = new Blob([metaStr], { type: 'text/csv' });
                                     
-                                    // The frontend always canonicalises metadata to {Sample, Group}.
-                                    // Without an explicit design the backend defaults to "~ condition",
-                                    // which does not exist -> every R engine fails. Send the real
-                                    // column name and an explicit treated-vs-control contrast.
+                                    // The backend validator renames whichever grouping column
+                                    // it resolves (here "Group") to "condition", and the R
+                                    // engines build their design around that name. So the
+                                    // design/contrast must refer to "condition", not "Group".
                                     const safeLevel = /^[A-Za-z0-9.]+$/;
                                     const params = {
                                         control_group: selectedCtrl,
                                         treated_group: selectedTrt,
                                         condition_col: 'Group',
-                                        design: '~ Group'
+                                        design: '~ condition'
                                     };
                                     if (safeLevel.test(selectedTrt) && safeLevel.test(selectedCtrl)) {
                                         // R scripts parse "<factor>_<numerator>_vs_<denominator>".
-                                        params.contrast = `Group_${selectedTrt}_vs_${selectedCtrl}`;
+                                        params.contrast = `condition_${selectedTrt}_vs_${selectedCtrl}`;
                                     }
                                     
                                     const jobRes = await submitAnalysisJob(countsBlob, metadataBlob, params);
