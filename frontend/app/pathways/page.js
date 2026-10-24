@@ -4,7 +4,7 @@ import { Storage } from '../../lib/storage';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import PathwayChart from '../../components/PathwayChart';
-import { runAllPipelines, formatDownstreamPipelines } from '../../lib/consensus';
+import { loadDownstreamPipelines } from '../../lib/downstreamData';
 import { fetchGoTermDetails } from '../../lib/quickgo_api';
 import { runGProfilerEnrichment } from '../../lib/gprofiler_api';
 import { computePathwayConsensus } from '../../lib/enrichment';
@@ -67,10 +67,7 @@ export default function PathwaysPage() {
         let pipelineData;
 
         if (mode === 'downstream') {
-          const deseq2 = JSON.parse(Storage.getItem('deseq2Data'));
-          const edger = JSON.parse(Storage.getItem('edgerData'));
-          const limma = JSON.parse(Storage.getItem('limmaData'));
-          pipelineData = formatDownstreamPipelines(deseq2, edger, limma);
+          pipelineData = await loadDownstreamPipelines();
         } else {
           const cachedData = Storage.getItem('pipelineData');
           if (cachedData) {

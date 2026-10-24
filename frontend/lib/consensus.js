@@ -31,9 +31,11 @@ export function formatDownstreamPipelines(deseq2, edger, limma) {
       if (idx !== undefined) {
          results[idx] = {
              gene_index: idx,
-             log2fc: parseFloat(row.logFC ?? row.log2FoldChange ?? 0),
-             pvalue: parseFloat(row.pvalue ?? row.PValue ?? row.pval ?? row.padj ?? row.FDR ?? 1),
-             padj: parseFloat(row.padj ?? row.FDR ?? row.pvalue ?? 1)
+             log2fc: parseFloat(row.logFC ?? row.log2FoldChange ?? row['log2(FC)'] ?? 0),
+             // Raw p-value aliases: DESeq2/edgeR (backend-normalised) and limma (raw CSV exports).
+             pvalue: parseFloat(row.pvalue ?? row.PValue ?? row['P.Value'] ?? row.pval ?? row['p.value'] ?? row.padj ?? row.FDR ?? row['adj.P.Val'] ?? 1),
+             // Adjusted p-value aliases, including limma's adj.P.Val.
+             padj: parseFloat(row.padj ?? row.FDR ?? row['adj.P.Val'] ?? row.qvalue ?? row.pvalue ?? row.PValue ?? row['P.Value'] ?? 1)
           };
       }
     });

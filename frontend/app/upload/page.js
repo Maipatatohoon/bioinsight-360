@@ -587,7 +587,9 @@ export default function UploadPage() {
                                                 
                                                 if (nextState.deseq2 && nextState.edger && nextState.limma) {
                                                     Storage.setItem('analysisMode', 'downstream');
+                                                    Storage.setItem('downstreamSource', 'upload');
                                                     // Clear stale compute-mode artifacts
+                                                    Storage.removeItem('currentJobId');
                                                     Storage.removeItem('rawCounts');
                                                     Storage.removeItem('filteredCounts');
                                                     Storage.removeItem('rawMetadata');
@@ -835,6 +837,7 @@ export default function UploadPage() {
                                     const jobRes = await submitAnalysisJob(countsBlob, metadataBlob, params);
                                     
                                     Storage.setItem('currentJobId', jobRes.job_id);
+                                    Storage.setItem('downstreamSource', 'job');
                                     Storage.setItem('activeControlGroup', selectedCtrl);
                                     Storage.setItem('activeTreatedGroup', selectedTrt);
                                     

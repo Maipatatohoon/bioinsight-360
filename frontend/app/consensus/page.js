@@ -8,7 +8,8 @@ import AgreementHeatmap from '../../components/AgreementHeatmap';
 import UpSetPlot from '../../components/UpSetPlot';
 import JaccardMatrix from '../../components/JaccardMatrix';
 import DEGTable from '../../components/DEGTable';
-import { runAllPipelines, computeConsensus, computePairwiseJaccard, computeFleissKappa, formatDownstreamPipelines } from '../../lib/consensus';
+import { computeConsensus, computePairwiseJaccard, computeFleissKappa } from '../../lib/consensus';
+import { loadDownstreamPipelines } from '../../lib/downstreamData';
 import { motion } from 'framer-motion';
 
 // Minimal CSV row parser — handles quoted fields (avoids split(',') breaking on gene descriptions)
@@ -45,6 +46,7 @@ function ConsensusPageContent() {
   const [jaccardMatrix, setJaccardMatrix] = useState([]);
   const [fleissKappa, setFleissKappa] = useState(0);
   const [analysisMode, setAnalysisMode] = useState('compute');
+  const [loadError, setLoadError] = useState(null);
 
   const searchParams = useSearchParams();
 
@@ -63,21 +65,14 @@ function ConsensusPageContent() {
         
         if (mode === 'downstream' || jobId) {
           if (jobId) {
-            const { getJobResults } = await import('../../lib/backend_api');
-            const jobData = await getJobResults(jobId);
-            
-            pData = formatDownstreamPipelines(
-              jobData.results.deseq2 || [],
-              jobData.results.edger || [],
-              jobData.results.limma || []
-            );
-            setAnalysisMode('downstream'); // force downstream mode for backend results
-          } else {
-            const deseq2 = JSON.parse(Storage.getItem('deseq2Data') || '[]');
-            const edger = JSON.parse(Storage.getItem('edgerData') || '[]');
-            const limma = JSON.parse(Storage.getItem('limmaData') || '[]');
-            pData = formatDownstreamPipelines(deseq2, edger, limma);
+            // Remember which job these results came from: Pathways and Export
+            // read this instead of the (never-written) per-tool storage keys.
+            Storage.setItem('currentJobId', jobId);
+            Storage.setItem('downstreamSource', 'job');
           }
+          pData = await loadDownstreamPipelines();
+          Storage.setItem('analysisMode', 'downstream');
+          setAnalysisMode('downstream'); // force downstream mode for backend results
         } else {
           router.replace('/upload');
           return;
@@ -92,6 +87,7 @@ function ConsensusPageContent() {
         recalculateConsensus(pData, pData.geneNames, parseFloat(fc), parseFloat(pval), initialMetric);
       } catch (err) {
         console.error('Error running consensus engine:', err);
+        setLoadError(err.message || 'Failed to load analysis results.');
       } finally {
         setLoading(false);
       }
@@ -322,7 +318,15 @@ function ConsensusPageContent() {
         </p>
       </motion.div>
 
-      {loading ? (
+      {loadError ? (
+        <div style={{ padding: '2rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '16px', color: '#991b1b' }}>
+          <h2 style={{ margin: '0 0 0.5rem 0' }}>Could not load results</h2>
+          <p style={{ margin: '0 0 1rem 0' }}>{loadError}</p>
+          <button onClick={() => router.push('/upload')} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', background: '#0284c7', color: 'white', cursor: 'pointer', fontWeight: 600 }}>
+            Back to upload
+          </button>
+        </div>
+      ) : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '16px' }}>
           <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
           <h2 style={{ color: '#e11d48', marginBottom: '0.5rem' }}>{analysisMode === 'downstream' ? 'Merging Pipeline Results...' : 'Running 6 Statistical Pipelines...'}</h2>

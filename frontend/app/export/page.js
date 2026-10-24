@@ -2,7 +2,8 @@
 import { Storage } from '../../lib/storage';
 
 import { useState, useEffect } from 'react';
-import { runAllPipelines, computeConsensus, computeFleissKappa, formatDownstreamPipelines } from '../../lib/consensus';
+import { computeConsensus, computeFleissKappa } from '../../lib/consensus';
+import { loadDownstreamPipelines } from '../../lib/downstreamData';
 import { computePathwayConsensus } from '../../lib/enrichment';
 import { runGProfilerEnrichment } from '../../lib/gprofiler_api';
 
@@ -35,10 +36,7 @@ export default function ExportPage() {
         let treatedIndices = [];
 
         if (analysisMode === 'downstream') {
-          const deseq2 = JSON.parse(Storage.getItem('deseq2Data'));
-          const edger = JSON.parse(Storage.getItem('edgerData'));
-          const limma = JSON.parse(Storage.getItem('limmaData'));
-          pData = formatDownstreamPipelines(deseq2, edger, limma);
+          pData = await loadDownstreamPipelines();
           geneNames = pData.geneNames;
           
           const rawMetaCSV = Storage.getItem('rawMetadata');

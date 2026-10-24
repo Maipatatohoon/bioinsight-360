@@ -18,6 +18,7 @@ export default function QCPage() {
   const [jobState, setJobState] = useState('QUEUED');
   const [jobProgress, setJobProgress] = useState(0);
   const [jobMessage, setJobMessage] = useState('Initializing...');
+  const [jobError, setJobError] = useState(null);
 
   const [cpmThreshold, setCpmThreshold] = useState(() => {
     return parseFloat(Storage.getItem('cpmThreshold') || '1.0');
@@ -65,13 +66,19 @@ export default function QCPage() {
 
         if (status.state === 'FAILED') {
           console.error("Job failed:", status.error);
+          setJobError(status.error || 'The analysis job failed.');
           clearInterval(pollInterval);
         } else if (status.state === 'COMPLETED') {
           clearInterval(pollInterval);
+          // Completed but no QC payload: stop spinning and explain instead.
+          if (!status.qc_data) {
+            setJobError('The job finished but returned no QC data.');
+          }
         }
         
       } catch (err) {
         console.error('Error polling job status:', err);
+        setJobError(err.message || 'Could not reach the analysis backend.');
       }
     }
 
@@ -87,6 +94,24 @@ export default function QCPage() {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [router]);
+
+  if (jobError && !qcData) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', color: '#0f172a', padding: '2rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+        <h2 style={{ color: '#b91c1c', marginBottom: '0.5rem' }}>Analysis failed</h2>
+        <p style={{ color: '#334155', maxWidth: '640px', marginBottom: '1.5rem' }}>{jobError}</p>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={() => window.location.reload()} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', background: '#0284c7', color: 'white', cursor: 'pointer', fontWeight: 600 }}>
+            Retry
+          </button>
+          <button onClick={() => router.push('/upload')} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', color: '#0f172a', cursor: 'pointer', fontWeight: 600 }}>
+            Back to upload
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !qcData) {
     return (
