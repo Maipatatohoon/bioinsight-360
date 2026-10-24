@@ -22,7 +22,8 @@ talks only to these routes (already implemented in `frontend/lib/backend_api.js`
 ## Quick path — Colab provides the backend
 
 1. Open **`BioInsight_360_Colab_Runbook.ipynb`** in Colab and run it top to bottom.
-2. Section 4 prints a public URL like `https://xxxx.trycloudflare.com`.
+2. **STEP 11** prints a public URL like `https://xxxx.trycloudflare.com`
+   (**STEP 14** reprints it).
 3. **Connect the site — pick one:**
    - **No redeploy needed (recommended):** on the deployed site, click **Backend** in the
      navbar, paste the tunnel URL, press **Test & Save**. It is stored in that browser and
@@ -33,6 +34,24 @@ talks only to these routes (already implemented in `frontend/lib/backend_api.js`
 
 > `NEXT_PUBLIC_*` values are baked in at build time — changing the Vercel variable does not
 > update a running deployment without a redeploy. The in-app **Backend** control avoids that.
+
+### If STEP 1 says "Failed to fetch"
+
+STEP 1 makes no network calls, so this is Colab's browser↔runtime link, not the notebook:
+
+- Firefox: Enhanced Tracking Protection → **Standard**, allow
+  `colab.research.google.com` and `*.googleusercontent.com`, disable content blockers.
+- Chrome: allow third-party cookies for `colab.research.google.com`, disable extensions,
+  retry in Incognito.
+- Campus/corporate Wi-Fi commonly blocks the runtime WebSocket. Open Colab on a **phone
+  hotspot**; the tunnel is created on Colab's VM, so the URL remains public after you
+  switch the laptop back to Wi-Fi.
+- Confirm with a brand-new notebook running `print("hi")`. If that fails too, the
+  notebook is not the cause.
+
+The runbook applies a backend hotfix automatically: DESeq2/edgeR/limma sometimes return
+`NA`/`Inf` for all-zero genes, which used to crash `GET /results` with
+`Out of range float values are not JSON compliant`. Those values are now sent as `null`.
 
 ## Production path — host the backend
 

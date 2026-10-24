@@ -1,0 +1,225 @@
+diff --git a/app/analysis/validator.py b/app/analysis/validator.py
+index b117d4d..670fd93 100644
+--- a/app/analysis/validator.py
++++ b/app/analysis/validator.py
+@@ -99,6 +99,14 @@ def validate_analysis_input(counts_df: pd.DataFrame, meta_df: pd.DataFrame, para
+         else:
+             raise DataValidationError(f"Condition column '{condition_col}' not found in metadata columns: {list(meta_df.columns)}.")
+ 
++    # The R engines build their design formula around a column literally named
++    # `condition` (the --design default in app/*/*.R). Normalise whichever
++    # grouping column we resolved so metadata using `group`, `treatment`, etc.
++    # does not fail with "object 'condition' not found".
++    if condition_col != "condition":
++        meta_df = meta_df.rename(columns={condition_col: "condition"})
++        condition_col = "condition"
++
+     counts_per_group = meta_df[condition_col].value_counts()
+     for group_name, count in counts_per_group.items():
+         if count < 2:
+diff --git a/app/jobs/job_manager.py b/app/jobs/job_manager.py
+index 1c742b6..cb10058 100644
+--- a/app/jobs/job_manager.py
++++ b/app/jobs/job_manager.py
+@@ -11,12 +11,48 @@ import sqlite3
+ import pandas as pd
+ import numpy as np
+ import os
++import re
+ import json
+ from typing import Dict, Any, Optional, List
+ from app.analysis.validator import validate_analysis_input, DataValidationError
+ from app.analysis.runner import REngineRunner
+ from app.analysis.qc import compute_qc_metrics
+ 
++
++def _normalise_design_params(params: Dict[str, Any], meta_path: str) -> Dict[str, Any]:
++    """Make design/contrast match the cleaned metadata column names.
++
++    validate_analysis_input() renames whichever grouping column was resolved to
++    ``condition``. Callers that still send the original name (e.g. the older
++    frontend sent ``~ Group``) would otherwise fail with
++    "object 'Group' not found". Rewrite unknown factor names to ``condition``.
++    """
++    params = dict(params or {})
++    try:
++        columns = list(pd.read_csv(meta_path, nrows=0).columns)
++    except Exception:
++        return params
++    if "condition" not in columns:
++        return params
++
++    design = str(params.get("design") or "~ condition")
++    rhs = design.split("~", 1)[1] if "~" in design else design
++    rhs = re.sub(
++        r"[A-Za-z_.][A-Za-z0-9_.]*",
++        lambda m: m.group(0) if m.group(0) in columns else "condition",
++        rhs,
++    )
++    params["design"] = "~ " + rhs.strip()
++    params["condition_col"] = "condition"
++
++    contrast = params.get("contrast")
++    if isinstance(contrast, str) and contrast:
++        factor, sep, rest = contrast.partition("_")
++        if sep and factor and factor not in columns:
++            params["contrast"] = "condition_" + rest
++    return params
++
++
+ class JobState:
+     QUEUED = "QUEUED"
+     VALIDATING = "VALIDATING"
+@@ -49,8 +85,8 @@ class JobStore:
+             cls._instance = inst
+         return cls._instance
+ 
+-    @staticmethod
+-    def _default_db_path() -> str:
++    @classmethod
++    def _default_db_path(cls) -> str:
+         # app/jobs/job_manager.py -> app/jobs -> app -> backend
+         backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+         return os.path.join(backend_root, "data", cls._DEFAULT_DB_FILENAME)
+@@ -296,7 +332,7 @@ class LocalRuntime(ComputeRuntime):
+             ("edger", os.path.join(app_dir, "edger", "edger_script.R")),
+             ("limma", os.path.join(app_dir, "limma", "limma_script.R")),
+         ]
+-        params = job.get("params", {}) or {}
++        params = _normalise_design_params(job.get("params", {}) or {}, meta_path)
+         results = {}
+         warnings = []
+         for i, (name, script) in enumerate(engines):
+diff --git a/app/main.py b/app/main.py
+index 529f957..28ad5cb 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -9,6 +9,7 @@ import pandas as pd
+ import io
+ import os
+ import hmac
++import math
+ import tempfile
+ 
+ from app.analysis.profiler import profile_dataset
+@@ -25,6 +26,24 @@ app = FastAPI(
+     description="Scientific microservice API for RNA-seq differential expression (DESeq2, edgeR, limma-voom)."
+ )
+ 
++
++def _json_safe(value):
++    """Replace NaN/Infinity with null so Starlette can render strict JSON.
++
++    DESeq2/edgeR/limma legitimately return NA for all-zero or filtered genes.
++    pandas turns those into NaN (and occasionally +/-Inf for log2FC), which are
++    valid Python floats but invalid JSON. FastAPI/Starlette then raises
++    "Out of range float values are not JSON compliant" and the whole results
++    request fails with a 500. Emitting null instead lets the UI skip the row.
++    """
++    if isinstance(value, float):
++        return value if math.isfinite(value) else None
++    if isinstance(value, dict):
++        return {key: _json_safe(item) for key, item in value.items()}
++    if isinstance(value, (list, tuple)):
++        return [_json_safe(item) for item in value]
++    return value
++
+ DEFAULT_WORKER_TOKEN = "dev-token-123"
+ BIOINSIGHT_ENV = os.environ.get("BIOINSIGHT_ENV", "development")
+ WORKER_TOKEN = os.environ.get("BIOINSIGHT_WORKER_TOKEN", DEFAULT_WORKER_TOKEN)
+@@ -126,7 +145,7 @@ def get_job_status(job_id: str):
+     if not job:
+         raise HTTPException(status_code=404, detail=f"Job ID '{job_id}' not found.")
+     
+-    return {
++    return _json_safe({
+         "job_id": job["job_id"],
+         "state": job["state"],
+         "progress": job["progress"],
+@@ -136,7 +155,7 @@ def get_job_status(job_id: str):
+         "created_at": job["created_at"],
+         "updated_at": job["updated_at"],
+         "qc_data": job.get("qc_data")
+-    }
++    })
+ 
+ @app.get("/api/analysis/{job_id}/results")
+ def get_job_results(job_id: str):
+@@ -147,12 +166,12 @@ def get_job_results(job_id: str):
+     if job["state"] != JobState.COMPLETED:
+         raise HTTPException(status_code=400, detail=f"Job '{job_id}' is not complete yet. Current state: {job['state']}")
+     
+-    return {
++    return _json_safe({
+         "job_id": job_id,
+         "status": "success",
+         "warnings": job["warnings"],
+         "results": job["results"]
+-    }
++    })
+ 
+ @app.post("/api/analysis/{job_id}/cancel")
+ def cancel_job(job_id: str):
+diff --git a/workers/colab_worker.py b/workers/colab_worker.py
+index fe5a265..b0d0b6d 100644
+--- a/workers/colab_worker.py
++++ b/workers/colab_worker.py
+@@ -1,4 +1,5 @@
+ import os
++import re
+ import sys
+ import time
+ import uuid
+@@ -24,6 +25,41 @@ HEADERS = {
+ def print_log(msg: str):
+     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [{WORKER_ID}] {msg}", flush=True)
+ 
++
++def _normalise_design(params: dict, meta_path: str) -> dict:
++    """Match design/contrast factor names to the cleaned metadata columns.
++
++    The API stores the grouping column as `condition` in the .clean.csv. Older
++    callers still send the original name (e.g. `~ Group`); rewrite it so the R
++    engines do not fail with "object 'Group' not found".
++    """
++    try:
++        columns = list(pd.read_csv(meta_path, nrows=0).columns)
++    except Exception:
++        return params
++    target = "condition" if "condition" in columns else next(
++        (c for c in columns if c.lower() not in ("sample", "sample_id", "id")), None
++    )
++    if not target:
++        return params
++
++    params = dict(params or {})
++    design = str(params.get("design") or f"~ {target}")
++    rhs = design.split("~", 1)[1] if "~" in design else design
++    rhs = re.sub(
++        r"[A-Za-z_.][A-Za-z0-9_.]*",
++        lambda match: match.group(0) if match.group(0) in columns else target,
++        rhs,
++    )
++    params["design"] = "~ " + rhs.strip()
++
++    contrast = params.get("contrast")
++    if isinstance(contrast, str) and contrast:
++        factor, sep, rest = contrast.partition("_")
++        if sep and factor and factor not in columns:
++            params["contrast"] = f"{target}_" + rest
++    return params
++
+ def get_session():
+     s = requests.Session()
+     retry = Retry(
+@@ -101,7 +137,9 @@ def process_job(job_id: str, params: dict):
+         r_meta.raise_for_status()
+         with open(meta_path, "wb") as f:
+             f.write(r_meta.content)
+-            
++
++        params = _normalise_design(params, meta_path)
++
+         # Locate R scripts
+         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+         deseq2_script = os.path.join(base_dir, "app", "deseq2", "deseq2_script.R")
