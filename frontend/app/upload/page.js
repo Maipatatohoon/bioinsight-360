@@ -894,6 +894,15 @@ export default function UploadPage() {
                                                 Duplicate metadata IDs (last row kept): {metadataReport.duplicateSamples.slice(0, 8).join(', ')}
                                             </div>
                                         )}
+                                        {metadataReport.extraColumns?.length > 0 && (
+                                            <div style={{ color: '#92400e' }}>
+                                                Extra columns are not used in this two-group analysis:{' '}
+                                                {metadataReport.extraColumns.map((column) =>
+                                                    `${column.name} (${column.values.slice(0, 6).join(', ')}${column.values.length > 6 ? ', …' : ''})`
+                                                ).join('; ')}
+                                                . If these are separate biological strata, upload metadata for one value at a time.
+                                            </div>
+                                        )}
                                         <div style={{ marginTop: '0.25rem', color: '#0369a1' }}>
                                             Check the default groups below before submitting. You can change them at any time.
                                         </div>

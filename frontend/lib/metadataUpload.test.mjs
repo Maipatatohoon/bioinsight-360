@@ -81,6 +81,17 @@ test('excludes count samples absent from a partial metadata file', () => {
   assert.deepEqual(result.unmatchedCountSamples, ['SRR3']);
 });
 
+test('reports additional metadata columns that would otherwise be ignored', () => {
+  const result = applyMetadataRows(assignments(['SRR1', 'SRR2']), [
+    { Sample: 'SRR1', Group: 'Control', 'Cell Type': 'Cumulus' },
+    { Sample: 'SRR2', Group: 'PCOS', 'Cell Type': 'Oocyte' },
+  ]);
+
+  assert.deepEqual(result.extraColumns, [
+    { name: 'Cell Type', values: ['Cumulus', 'Oocyte'] },
+  ]);
+});
+
 test('reports metadata IDs that are not in the count matrix', () => {
   const result = applyMetadataRows(assignments(['SRR1']), [
     { Sample: 'SRR1', Group: 'Control' },

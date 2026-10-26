@@ -123,6 +123,7 @@ export function applyMetadataRows(assignments = [], rows = []) {
       unmatchedCountSamples: [],
       metadataOnlySamples: [],
       duplicateSamples: [],
+      extraColumns: [],
       columns,
     };
   }
@@ -137,9 +138,20 @@ export function applyMetadataRows(assignments = [], rows = []) {
       unmatchedCountSamples: [],
       metadataOnlySamples: [],
       duplicateSamples: [],
+      extraColumns: [],
       columns,
     };
   }
+
+  const extraColumns = headers
+    .filter((header) => header !== columns.sampleHeader && header !== columns.groupHeader)
+    .map((header) => {
+      const values = Array.from(
+        new Set(rows.map((row) => cleanValue(row[header])).filter(Boolean))
+      );
+      return { name: header, values };
+    })
+    .filter((column) => column.values.length > 1);
 
   const exact = new Map();
   const normalised = new Map();
@@ -210,6 +222,7 @@ export function applyMetadataRows(assignments = [], rows = []) {
     unmatchedCountSamples,
     metadataOnlySamples,
     duplicateSamples: Array.from(duplicates),
+    extraColumns,
     columns,
   };
 }
