@@ -11,6 +11,7 @@ import {
     applyMetadataRows,
     buildMetadataTemplate,
     chooseComparisonGroups,
+    detectMetadataColumns,
     suggestGroupsFromSampleNames,
 } from '../../lib/metadataUpload';
 
@@ -101,6 +102,27 @@ export function processCountMatrix(rawText) {
         throw new Error("No sample columns detected in count matrix.");
     }
 
+    if (sampleCols.some((col) => /^__parsed_extra$/i.test(String(col).trim()))) {
+        throw new Error(
+            "The count-matrix header is malformed (an extra column was detected). " +
+            "Make sure the file is a genes × samples table with matching headers and numeric counts."
+        );
+    }
+
+    const nonNumericSampleCols = sampleCols.filter((col) => {
+        return !parsed.data.some((row) => {
+            const raw = row[col];
+            if (raw === undefined || raw === null || String(raw).trim() === '') return false;
+            return Number.isFinite(Number(raw));
+        });
+    });
+    if (nonNumericSampleCols.length > 0) {
+        throw new Error(
+            `These columns do not contain numeric counts: ${nonNumericSampleCols.slice(0, 6).join(', ')}. ` +
+            "This usually means a metadata/annotation file was uploaded into the count-matrix box, or the CSV is malformed."
+        );
+    }
+
     // Clean data: ensure 'Gene' is the first key and preserve original gene identifiers
     const cleanData = parsed.data.map((row, rowIdx) => {
         const newRow = {};
@@ -171,11 +193,54 @@ export default function UploadPage() {
     const [selectedCtrl, setSelectedCtrl] = useState('Control');
     const [selectedTrt, setSelectedTrt] = useState('Treated');
     const [metadataReport, setMetadataReport] = useState(null);
+    const [pendingMetadata, setPendingMetadata] = useState(null);
 
     useEffect(() => {
         Storage.setItem('activeControlGroup', selectedCtrl);
         Storage.setItem('activeTreatedGroup', selectedTrt);
     }, [selectedCtrl, selectedTrt]);
+
+    const commitMetadataResult = (result, fileName) => {
+        const report = { ...result, source: 'metadata', fileName };
+        setMetadataReport(report);
+
+        if (!result.ok) return false;
+
+        const defaults = chooseComparisonGroups(result.groups);
+        const nextControl = defaults.control || selectedCtrl || 'Control';
+        const nextTreated = defaults.treated || selectedTrt || 'Treated';
+
+        setUniqueGroups(Array.from(new Set([...result.groups, 'Exclude'])));
+        setSelectedCtrl(nextControl);
+        setSelectedTrt(nextTreated);
+        Storage.setItem('activeControlGroup', nextControl);
+        Storage.setItem('activeTreatedGroup', nextTreated);
+
+        setMetaAssignments(result.assignments);
+        Storage.setItem('metaData', JSON.stringify(result.assignments));
+        Storage.setItem('rawMetadata', Papa.unparse(result.assignments));
+
+        setSummary((previous) => previous ? ({
+            ...previous,
+            controlCount: result.assignments.filter(
+                (row) => String(row.Group).toLowerCase() === String(nextControl).toLowerCase()
+            ).length,
+            treatedCount: result.assignments.filter(
+                (row) => String(row.Group).toLowerCase() === String(nextTreated).toLowerCase()
+            ).length,
+        }) : null);
+
+        return true;
+    };
+
+    // If metadata was uploaded before the count matrix, apply it as soon as
+    // the count samples exist. This keeps either upload order valid.
+    useEffect(() => {
+        if (!pendingMetadata || metaAssignments.length === 0) return;
+        const result = applyMetadataRows(metaAssignments, pendingMetadata.rows);
+        commitMetadataResult(result, pendingMetadata.fileName);
+        setPendingMetadata(null);
+    }, [pendingMetadata, metaAssignments]);
 
     const handleMetadataFile = async (file) => {
         if (!file) return;
@@ -191,43 +256,37 @@ export default function UploadPage() {
                 throw new Error('The metadata file has no data rows.');
             }
 
-            const result = applyMetadataRows(metaAssignments, parsed.data);
-            const report = { ...result, source: 'metadata', fileName: file.name };
-            setMetadataReport(report);
+            const columns = detectMetadataColumns(Object.keys(parsed.data[0] || {}));
+            if (!columns.sampleHeader || !columns.groupHeader) {
+                const message = 'The metadata file needs a sample column and a group/condition column.';
+                setMetadataReport({ ok: false, error: message, fileName: file.name });
+                alert(message);
+                return;
+            }
 
-            if (!result.ok) {
+            // Metadata can be supplied before counts. Hold it until the count
+            // sample columns exist, then the effect above applies it.
+            if (metaAssignments.length === 0) {
+                setPendingMetadata({
+                    fileName: file.name,
+                    rows: parsed.data,
+                    columns,
+                });
+                setMetadataReport(null);
+                return;
+            }
+
+            const result = applyMetadataRows(metaAssignments, parsed.data);
+            const applied = commitMetadataResult(result, file.name);
+
+            if (!applied) {
                 alert(
                     `${result.error}\n\n` +
                     `Detected sample column: ${result.columns?.sampleHeader || 'none'}\n` +
                     `Detected group column: ${result.columns?.groupHeader || 'none'}\n\n` +
                     'Check that the sample IDs match the count-matrix column names, then try again.'
                 );
-                return;
             }
-
-            const defaults = chooseComparisonGroups(result.groups);
-            const nextControl = defaults.control || selectedCtrl || 'Control';
-            const nextTreated = defaults.treated || selectedTrt || 'Treated';
-
-            setUniqueGroups(Array.from(new Set([...result.groups, 'Exclude'])));
-            setSelectedCtrl(nextControl);
-            setSelectedTrt(nextTreated);
-            Storage.setItem('activeControlGroup', nextControl);
-            Storage.setItem('activeTreatedGroup', nextTreated);
-
-            setMetaAssignments(result.assignments);
-            Storage.setItem('metaData', JSON.stringify(result.assignments));
-            Storage.setItem('rawMetadata', Papa.unparse(result.assignments));
-
-            setSummary((previous) => previous ? ({
-                ...previous,
-                controlCount: result.assignments.filter(
-                    (row) => String(row.Group).toLowerCase() === String(nextControl).toLowerCase()
-                ).length,
-                treatedCount: result.assignments.filter(
-                    (row) => String(row.Group).toLowerCase() === String(nextTreated).toLowerCase()
-                ).length,
-            }) : null);
         } catch (error) {
             console.error('Metadata import failed:', error);
             setMetadataReport({ ok: false, error: error.message, fileName: file.name });
@@ -565,6 +624,7 @@ export default function UploadPage() {
                                     setLoading(false);
                                 }}
                             />
+                            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.78rem', color: '#0369a1', fontWeight: 700, letterSpacing: '0.04em' }}>1. RAW COUNT MATRIX (REQUIRED)</p>
                             <p style={{ fontSize: '1.2rem', color: '#0369a1', fontWeight: 600 }}>Drag and drop raw count matrix CSV here</p>
                             <p style={{ fontSize: '0.9rem', color: '#0ea5e9', marginTop: '0.5rem' }}>or click to browse your computer</p>
                         </label>
@@ -574,6 +634,46 @@ export default function UploadPage() {
                                 {loading ? 'Loading...' : 'Load Demo Dataset (GSE52778)'}
                             </button>
                             <span style={{ color: '#64748b' }}>Used for quick evaluation without files</span>
+                        </div>
+
+                        <div style={{ marginTop: '2rem', padding: '1.25rem 1.5rem', background: '#faf5ff', border: '2px dashed #c4b5fd', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div style={{ maxWidth: '680px' }}>
+                                <h3 style={{ margin: 0, color: '#5b21b6', fontSize: '1.05rem' }}>2. Sample metadata (recommended)</h3>
+                                <p style={{ margin: '0.35rem 0 0 0', color: '#6d28d9', fontSize: '0.88rem', lineHeight: 1.5 }}>
+                                    Upload a CSV with <strong>Sample</strong> and <strong>Group</strong> columns. You can upload it before or after the count matrix; groups apply automatically.
+                                </p>
+                                {pendingMetadata ? (
+                                    <div style={{ marginTop: '0.5rem', color: '#047857', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <strong>✓ {pendingMetadata.fileName} loaded.</strong>
+                                        <span>Upload the count matrix next.</span>
+                                        <button onClick={() => setPendingMetadata(null)} style={{ padding: '0.15rem 0.5rem', background: '#fff', color: '#6d28d9', border: '1px solid #c4b5fd', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                            Remove
+                                        </button>
+                                    </div>
+                                ) : metadataReport?.source === 'metadata' ? (
+                                    <div style={{ marginTop: '0.5rem', color: metadataReport.ok ? '#047857' : '#b91c1c', fontSize: '0.85rem' }}>
+                                        <strong>{metadataReport.ok ? '✓ Metadata applied' : 'Metadata not applied'}:</strong> {metadataReport.fileName}
+                                        {!metadataReport.ok && metadataReport.error ? ` — ${metadataReport.error}` : ''}
+                                    </div>
+                                ) : (
+                                    <div style={{ marginTop: '0.5rem', color: '#7c3aed', fontSize: '0.82rem' }}>
+                                        No metadata file selected. Without it, assign groups manually after loading counts.
+                                    </div>
+                                )}
+                            </div>
+                            <label style={{ padding: '0.65rem 1.1rem', background: '#7c3aed', color: '#fff', border: '1px solid #6d28d9', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                Upload Metadata CSV
+                                <input
+                                    type="file"
+                                    accept=".csv,.tsv,.txt"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        handleMetadataFile(file);
+                                        e.target.value = '';
+                                    }}
+                                />
+                            </label>
                         </div>
                     </div>
                 )}
