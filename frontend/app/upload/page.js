@@ -7,6 +7,12 @@ import Papa from 'papaparse';
 import { fetchGeoMetadata } from '../../lib/geo_api';
 import { motion } from 'framer-motion';
 import { submitAnalysisJob, getBackendUrl } from '../../lib/backend_api';
+import {
+    applyMetadataRows,
+    buildMetadataTemplate,
+    chooseComparisonGroups,
+    suggestGroupsFromSampleNames,
+} from '../../lib/metadataUpload';
 
 export function processCountMatrix(rawText) {
     if (!rawText || !rawText.trim()) {
@@ -155,20 +161,90 @@ export default function UploadPage() {
     const [isFetchingGeo, setIsFetchingGeo] = useState(false);
     const [geoError, setGeoError] = useState('');
 
-    // Auto-Assign State
-    const [autoCtrl, setAutoCtrl] = useState('control');
-    const [autoTrt, setAutoTrt] = useState('treated');
+    // Auto-Assign State. Blank keywords mean "infer repeated labels from sample names".
+    const [autoCtrl, setAutoCtrl] = useState('');
+    const [autoTrt, setAutoTrt] = useState('');
     const [autoFilter, setAutoFilter] = useState('');
 
     // Group Selection State
     const [uniqueGroups, setUniqueGroups] = useState(['Control', 'Treated']);
     const [selectedCtrl, setSelectedCtrl] = useState('Control');
     const [selectedTrt, setSelectedTrt] = useState('Treated');
+    const [metadataReport, setMetadataReport] = useState(null);
 
     useEffect(() => {
         Storage.setItem('activeControlGroup', selectedCtrl);
         Storage.setItem('activeTreatedGroup', selectedTrt);
     }, [selectedCtrl, selectedTrt]);
+
+    const handleMetadataFile = async (file) => {
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const firstLine = text.substring(0, text.indexOf('\n'));
+            let delimiter = ',';
+            if (firstLine.includes('\t')) delimiter = '\t';
+            else if (firstLine.includes(';') && !firstLine.includes(',')) delimiter = ';';
+
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter });
+            if (!parsed.data.length) {
+                throw new Error('The metadata file has no data rows.');
+            }
+
+            const result = applyMetadataRows(metaAssignments, parsed.data);
+            const report = { ...result, source: 'metadata', fileName: file.name };
+            setMetadataReport(report);
+
+            if (!result.ok) {
+                alert(
+                    `${result.error}\n\n` +
+                    `Detected sample column: ${result.columns?.sampleHeader || 'none'}\n` +
+                    `Detected group column: ${result.columns?.groupHeader || 'none'}\n\n` +
+                    'Check that the sample IDs match the count-matrix column names, then try again.'
+                );
+                return;
+            }
+
+            const defaults = chooseComparisonGroups(result.groups);
+            const nextControl = defaults.control || selectedCtrl || 'Control';
+            const nextTreated = defaults.treated || selectedTrt || 'Treated';
+
+            setUniqueGroups(Array.from(new Set([...result.groups, 'Exclude'])));
+            setSelectedCtrl(nextControl);
+            setSelectedTrt(nextTreated);
+            Storage.setItem('activeControlGroup', nextControl);
+            Storage.setItem('activeTreatedGroup', nextTreated);
+
+            setMetaAssignments(result.assignments);
+            Storage.setItem('metaData', JSON.stringify(result.assignments));
+            Storage.setItem('rawMetadata', Papa.unparse(result.assignments));
+
+            setSummary((previous) => previous ? ({
+                ...previous,
+                controlCount: result.assignments.filter(
+                    (row) => String(row.Group).toLowerCase() === String(nextControl).toLowerCase()
+                ).length,
+                treatedCount: result.assignments.filter(
+                    (row) => String(row.Group).toLowerCase() === String(nextTreated).toLowerCase()
+                ).length,
+            }) : null);
+        } catch (error) {
+            console.error('Metadata import failed:', error);
+            setMetadataReport({ ok: false, error: error.message, fileName: file.name });
+            alert(`Failed to parse metadata file: ${error.message}`);
+        }
+    };
+
+    const handleDownloadMetadataTemplate = () => {
+        if (!metaAssignments.length) return;
+        const csv = buildMetadataTemplate(metaAssignments);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'bioinsight_metadata_template.csv';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    };
 
     const handleLoadDemo = async () => {
         setLoading(true);
@@ -229,6 +305,7 @@ export default function UploadPage() {
                 Storage.setItem('rawMetadata', Papa.unparse(normalizedMeta));
                 Storage.setItem('metaData', JSON.stringify(normalizedMeta));
                 setMetaAssignments(normalizedMeta);
+                setMetadataReport(null);
                 Storage.setItem('analysisMode', 'compute');
 
                 // Clear stale artifacts from previous runs
@@ -321,6 +398,7 @@ export default function UploadPage() {
             });
 
             setMetaAssignments(unassignedMeta);
+            setMetadataReport(null);
 
             // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
             const cleanCSV = Papa.unparse(cleanData);
@@ -460,6 +538,7 @@ export default function UploadPage() {
                                         });
 
                                         setMetaAssignments(unassignedMeta);
+                                        setMetadataReport(null);
 
                                         // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
                                         const cleanCSV = Papa.unparse(cleanData);
@@ -665,7 +744,7 @@ export default function UploadPage() {
                         {metaAssignments.filter((row) => /^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length > 0 && (
                             <div style={{ marginBottom: '1.5rem', padding: '0.9rem 1rem', borderRadius: '10px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.9rem' }}>
                                 <strong>{metaAssignments.filter((row) => /^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length} sample(s) are Unassigned/Exclude.</strong>{' '}
-                                Upload a metadata CSV or assign groups below. Only samples in the selected control and treatment groups will be submitted; groups need at least 2 replicates.
+                                Only samples in the selected control and treatment groups are submitted. Excluded samples are expected when your metadata covers a subset of the count matrix; each selected group needs at least 2 replicates.
                             </div>
                         )}
 
@@ -673,79 +752,81 @@ export default function UploadPage() {
                             <div>
                                 <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
                                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                                    Type keywords to classify samples, or upload your own Metadata CSV.
+                                    Recommended: upload a CSV with <strong>Sample</strong> and <strong>Group</strong> columns. Groups fill automatically for any dataset. Use name keywords only when you do not have metadata.
                                 </p>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                <label style={{ padding: '0.5rem 1rem', background: '#e2e8f0', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                                <label style={{ padding: '0.5rem 1rem', background: '#0284c7', color: '#fff', border: '1px solid #0369a1', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
                                     Upload Metadata CSV
-                                    <input type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} onChange={async (e) => {
-                                        const file = e.target.files[0];
-                                        if (!file) return;
-                                        try {
-                                            const text = await file.text();
-                                            let delim = ',';
-                                            const firstLine = text.substring(0, text.indexOf('\n'));
-                                            if (firstLine.includes('\t')) delim = '\t';
-                                            else if (firstLine.includes(';') && !firstLine.includes(',')) delim = ';';
-                                            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter: delim });
-
-                                            // Detect sample and group column headers
-                                            const headers = Object.keys(parsed.data[0] || {});
-                                            const sampleHeader = headers.find(h => /^(sample|sample_?id|sample_?name|id|name)$/i.test(h.trim())) || headers[0];
-                                            const groupHeader = headers.find(h => /^(group|condition|treatment|status|phenotype|type)$/i.test(h.trim())) || (headers.length > 1 ? headers[1] : null);
-
-                                            const metaObj = {};
-                                            parsed.data.forEach(row => {
-                                                const sample = row[sampleHeader];
-                                                const group = groupHeader ? row[groupHeader] : row[Object.keys(row)[1]];
-                                                if (sample !== undefined && sample !== null && String(sample).trim() !== '') {
-                                                    metaObj[String(sample).trim()] = group !== undefined && group !== null ? String(group).trim() : 'Unassigned';
-                                                }
-                                            });
-
-                                            const updated = metaAssignments.map(m => {
-                                                const sName = String(m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').trim();
-                                                const matchKey = Object.keys(metaObj).find(k => k === sName) ||
-                                                                 Object.keys(metaObj).find(k => k.toLowerCase() === sName.toLowerCase());
-                                                return {
-                                                    Sample: sName,
-                                                    Group: matchKey ? metaObj[matchKey] : 'Exclude'
-                                                };
-                                            });
-
-                                            const assignedGroups = Array.from(new Set(updated.map(d => d.Group).filter(g => g && g !== 'Exclude')));
-                                            const allUnique = Array.from(new Set([...assignedGroups, 'Exclude']));
-                                            setUniqueGroups(allUnique);
-
-                                            const ctrl = assignedGroups.find(g => /control|ctrl|untreated|baseline|vehicle|wt/i.test(g)) || assignedGroups[0] || 'Control';
-                                            const trt = assignedGroups.find(g => g !== ctrl && !/exclude/i.test(g)) || assignedGroups[1] || 'Treated';
-
-                                            setSelectedCtrl(ctrl);
-                                            setSelectedTrt(trt);
-                                            Storage.setItem('activeControlGroup', ctrl);
-                                            Storage.setItem('activeTreatedGroup', trt);
-
-                                            setMetaAssignments(updated);
-                                            Storage.setItem('metaData', JSON.stringify(updated));
-                                            Storage.setItem('rawMetadata', Papa.unparse(updated));
-
-                                            setSummary(prev => prev ? ({
-                                                ...prev,
-                                                controlCount: updated.filter(ma => ma.Group.toLowerCase() === ctrl.toLowerCase()).length,
-                                                treatedCount: updated.filter(ma => ma.Group.toLowerCase() === trt.toLowerCase()).length
-                                            }) : null);
-                                        } catch (err) {
-                                            alert("Failed to parse metadata file: " + err.message);
-                                        }
-                                    }} />
+                                    <input
+                                        type="file"
+                                        accept=".csv,.tsv,.txt"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            handleMetadataFile(file);
+                                            e.target.value = '';
+                                        }}
+                                    />
                                 </label>
+                                <button
+                                    onClick={handleDownloadMetadataTemplate}
+                                    title="Download a CSV with all current sample IDs and editable Group values."
+                                    style={{ padding: '0.5rem 1rem', background: '#fff', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+                                >
+                                    Download Template
+                                </button>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#f1f5f9', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                <input type="text" value={autoCtrl} onChange={(e) => setAutoCtrl(e.target.value)} placeholder="Control keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
-                                <input type="text" value={autoTrt} onChange={(e) => setAutoTrt(e.target.value)} placeholder="Treated keyword" style={{ width: '110px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+                                <input type="text" value={autoCtrl} onChange={(e) => setAutoCtrl(e.target.value)} placeholder="Control keyword (optional)" style={{ width: '145px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+                                <input type="text" value={autoTrt} onChange={(e) => setAutoTrt(e.target.value)} placeholder="Treated keyword (optional)" style={{ width: '145px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
                                 <input type="text" value={autoFilter} onChange={(e) => setAutoFilter(e.target.value)} placeholder="Required (e.g. Oocyte)" style={{ width: '130px', fontSize: '0.8rem', padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} title="If set, samples lacking this word are Excluded." />
                                 <button onClick={() => {
+                                    const samples = metaAssignments.map((m) =>
+                                        String(m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').trim()
+                                    );
+
+                                    if (!autoCtrl.trim() && !autoTrt.trim() && !autoFilter.trim()) {
+                                        const suggestion = suggestGroupsFromSampleNames(samples);
+                                        if (!suggestion.ok) {
+                                            alert(
+                                                `${suggestion.error}\n\n` +
+                                                'Sample-name inference is only a convenience. Upload a metadata CSV when the sample names do not contain group labels.'
+                                            );
+                                            return;
+                                        }
+
+                                        setMetaAssignments(suggestion.assignments);
+                                        Storage.setItem('metaData', JSON.stringify(suggestion.assignments));
+                                        Storage.setItem('rawMetadata', Papa.unparse(suggestion.assignments));
+                                        setUniqueGroups(Array.from(new Set([...suggestion.groups, 'Exclude'])));
+                                        setSelectedCtrl(suggestion.control);
+                                        setSelectedTrt(suggestion.treated);
+                                        Storage.setItem('activeControlGroup', suggestion.control);
+                                        Storage.setItem('activeTreatedGroup', suggestion.treated);
+                                        setSummary((prev) => prev ? ({
+                                            ...prev,
+                                            controlCount: suggestion.assignments.filter(
+                                                (row) => row.Group.toLowerCase() === String(suggestion.control).toLowerCase()
+                                            ).length,
+                                            treatedCount: suggestion.assignments.filter(
+                                                (row) => row.Group.toLowerCase() === String(suggestion.treated).toLowerCase()
+                                            ).length,
+                                        }) : null);
+                                        setMetadataReport({
+                                            ok: true,
+                                            source: 'sample_names',
+                                            fileName: 'sample names',
+                                            matched: suggestion.assignments.length,
+                                            groupCounts: suggestion.groupCounts,
+                                            groups: suggestion.groups,
+                                            unmatchedCountSamples: [],
+                                            metadataOnlySamples: [],
+                                            duplicateSamples: [],
+                                        });
+                                        return;
+                                    }
+
                                     const updated = metaAssignments.map(m => {
                                         const sName = String(m.Sample || m.sample || m.ID || m.id || m.Name || m.name || '').trim();
                                         const sMeta = Object.values(m).join(' ').toLowerCase();
@@ -764,14 +845,64 @@ export default function UploadPage() {
                                     setMetaAssignments(updated);
                                     Storage.setItem('metaData', JSON.stringify(updated));
                                     Storage.setItem('rawMetadata', Papa.unparse(updated));
+                                    setMetadataReport(null);
                                     setSummary(prev => prev ? ({
                                         ...prev,
                                         controlCount: updated.filter(ma => ma.Group.toLowerCase() === selectedCtrl.toLowerCase()).length,
                                         treatedCount: updated.filter(ma => ma.Group.toLowerCase() === selectedTrt.toLowerCase()).length
                                     }) : null);
-                                }} style={{ padding: '0.3rem 0.6rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Auto-Assign</button>
+                                }} title="Leave both keyword fields blank to suggest groups from repeated labels in sample names. Keyword matching still works when either field is filled." style={{ padding: '0.3rem 0.6rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>Auto-Assign</button>
                             </div>
                         </div>
+                        {metadataReport && (
+                            <div style={{
+                                marginBottom: '1rem',
+                                padding: '0.9rem 1rem',
+                                borderRadius: '10px',
+                                background: metadataReport.ok ? '#f0f9ff' : '#fef2f2',
+                                border: `1px solid ${metadataReport.ok ? '#bae6fd' : '#fecaca'}`,
+                                color: metadataReport.ok ? '#075985' : '#991b1b',
+                                fontSize: '0.85rem',
+                                lineHeight: 1.6,
+                            }}>
+                                {metadataReport.ok ? (
+                                    <>
+                                        <strong>
+                                            {metadataReport.source === 'sample_names'
+                                                ? `Groups suggested from sample-name labels: ${metadataReport.matched}/${metaAssignments.length} samples assigned. Verify these labels before submitting.`
+                                                : `Metadata applied from ${metadataReport.fileName}: ${metadataReport.matched}/${metaAssignments.length} count samples matched.`}
+                                        </strong>
+                                        {Object.keys(metadataReport.groupCounts || {}).length > 0 && (
+                                            <div>
+                                                Groups: {Object.entries(metadataReport.groupCounts || {}).map(([group, count]) => `${group} (${count})`).join(' · ')}
+                                            </div>
+                                        )}
+                                        {metadataReport.unmatchedCountSamples?.length > 0 && (
+                                            <div>
+                                                Not in metadata, excluded: {metadataReport.unmatchedCountSamples.slice(0, 8).join(', ')}
+                                                {metadataReport.unmatchedCountSamples.length > 8 ? ` +${metadataReport.unmatchedCountSamples.length - 8} more` : ''}
+                                            </div>
+                                        )}
+                                        {metadataReport.metadataOnlySamples?.length > 0 && (
+                                            <div>
+                                                Metadata-only IDs (not count columns): {metadataReport.metadataOnlySamples.slice(0, 8).join(', ')}
+                                                {metadataReport.metadataOnlySamples.length > 8 ? ` +${metadataReport.metadataOnlySamples.length - 8} more` : ''}
+                                            </div>
+                                        )}
+                                        {metadataReport.duplicateSamples?.length > 0 && (
+                                            <div>
+                                                Duplicate metadata IDs (last row kept): {metadataReport.duplicateSamples.slice(0, 8).join(', ')}
+                                            </div>
+                                        )}
+                                        <div style={{ marginTop: '0.25rem', color: '#0369a1' }}>
+                                            Check the default groups below before submitting. You can change them at any time.
+                                        </div>
+                                    </>
+                                ) : (
+                                    <strong>Metadata not applied: {metadataReport.error}</strong>
+                                )}
+                            </div>
+                        )}
                         <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
                             {metaAssignments.map((m, idx) => {
                                 const sampleName = m.Sample || m.sample || m.ID || m.id || m.Name || m.name || `Sample_${idx}`;
