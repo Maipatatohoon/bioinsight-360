@@ -19,12 +19,13 @@ export default function DEGTable({ consensusResults = [], pMetric = 'auto', onGe
 
   const isPadjMode = pMetric === 'padj' || (pMetric === 'auto' && consensusResults[0]?.activeMetric === 'padj');
 
-  const categories = ['All', 'High Confidence', 'Moderate Confidence', 'Method-Sensitive', 'Not Significant'];
+  const categories = ['All', 'High Confidence', 'Moderate Confidence', 'Method-Sensitive', 'Direction Conflict', 'Not Significant'];
 
   const categoryMap = {
     'High Confidence': 'high_confidence',
     'Moderate Confidence': 'moderate_confidence',
     'Method-Sensitive': 'method_sensitive',
+    'Direction Conflict': 'direction_conflict',
     'Not Significant': 'not_significant'
   };
 
@@ -35,8 +36,8 @@ export default function DEGTable({ consensusResults = [], pMetric = 'auto', onGe
       const matchesCategory = categoryFilter === 'All' || gene.category === categoryMap[categoryFilter];
       return matchesSearch && matchesCategory;
     }).sort((a, b) => {
-      const aP = isPadjMode && a.padjs && a.padjs.length > 0 ? getMinPvalue(a.padjs) : getMinPvalue(a.pvalues);
-      const bP = isPadjMode && b.padjs && b.padjs.length > 0 ? getMinPvalue(b.padjs) : getMinPvalue(b.pvalues);
+      const aP = isPadjMode ? getMinPvalue(a.padjs) : getMinPvalue(a.pvalues);
+      const bP = isPadjMode ? getMinPvalue(b.padjs) : getMinPvalue(b.pvalues);
       const aVal = sortConfig.key === 'pvalue' ? aP : sortConfig.key === 'log2fc_median' ? Math.abs(a[sortConfig.key] ?? 0) : (a[sortConfig.key] ?? 0);
       const bVal = sortConfig.key === 'pvalue' ? bP : sortConfig.key === 'log2fc_median' ? Math.abs(b[sortConfig.key] ?? 0) : (b[sortConfig.key] ?? 0);
 
@@ -64,8 +65,8 @@ export default function DEGTable({ consensusResults = [], pMetric = 'auto', onGe
       g.consensusScore,
       g.category,
       g.log2fc_median?.toFixed(2) || '',
-      (getMinPvalue(g.pvalues)).toExponential(2),
-      g.padjs && g.padjs.length > 0 ? (getMinPvalue(g.padjs)).toExponential(2) : ''
+      g.pvalues && g.pvalues.length > 0 ? getMinPvalue(g.pvalues).toExponential(2) : 'NA',
+      g.padjs && g.padjs.length > 0 ? getMinPvalue(g.padjs).toExponential(2) : 'NA'
     ]);
 
     const csvContent = [headers.join(','), ...csvData.map(row => row.join(','))].join('\n');
@@ -84,6 +85,7 @@ export default function DEGTable({ consensusResults = [], pMetric = 'auto', onGe
       case 'high_confidence': return 'bg-emerald-500/20 text-emerald-600';
       case 'moderate_confidence': return 'bg-amber-500/20 text-amber-600';
       case 'method_sensitive': return 'bg-orange-500/20 text-orange-600';
+      case 'direction_conflict': return 'bg-rose-500/20 text-rose-600';
       case 'not_significant':
       default: return 'bg-slate-500/20 text-slate-500';
     }
@@ -135,19 +137,19 @@ export default function DEGTable({ consensusResults = [], pMetric = 'auto', onGe
                   <div className="flex items-center gap-2">
                     <span className="w-6">{gene.consensusScore}</span>
                     <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-sky-600" style={{ width: `${(gene.consensusScore / 6) * 100}%` }}></div>
+                      <div className="h-full bg-sky-600" style={{ width: `${(gene.consensusScore / Math.max(1, gene.totalPipelines || 6)) * 100}%` }}></div>
                     </div>
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded text-xs font-semibold ${getCategoryColor(gene.category)}`}>
-                    {gene.category}
+                    {gene.category.replace(/_/g, ' ')}
                   </span>
                 </td>
                 <td className="px-4 py-3">{gene.log2fc_median?.toFixed(3) || '-'}</td>
                 <td className="px-4 py-3">
-                  {isPadjMode && gene.padjs && gene.padjs.length > 0
-                    ? getMinPvalue(gene.padjs).toExponential(2)
+                  {isPadjMode
+                    ? (gene.padjs && gene.padjs.length > 0 ? getMinPvalue(gene.padjs).toExponential(2) : '—')
                     : getMinPvalue(gene.pvalues).toExponential(2)}
                 </td>
               </tr>

@@ -26,17 +26,19 @@ export default function ConsensusVolcano({ consensusResults = [], fcThreshold = 
     { name: 'High Confidence', category: 'high_confidence', color: '#059669' },
     { name: 'Moderate Confidence', category: 'moderate_confidence', color: '#d97706' },
     { name: 'Method-Sensitive', category: 'method_sensitive', color: '#f97316' },
+    { name: 'Direction Conflict', category: 'direction_conflict', color: '#be123c' },
     { name: 'Not Significant', category: 'not_significant', color: '#1e293b' },
   ].map((group) => {
-    const data = consensusResults.filter((g) => g.category === group.category);
+    const data = consensusResults.filter((g) => g.category === group.category
+      && (!isPadj || (Array.isArray(g.padjs) && g.padjs.length > 0)));
     return {
       x: data.map((g) => g.log2fc_median),
       y: data.map((g) => {
-        const vals = isPadj && g.padjs && g.padjs.length > 0 ? g.padjs : g.pvalues;
+        const vals = isPadj ? (g.padjs || []) : (g.pvalues || []);
         return -Math.log10(Math.max(getMedianPvalue(vals), 1e-300));
       }),
       text: data.map((g) => {
-        const vals = isPadj && g.padjs && g.padjs.length > 0 ? g.padjs : g.pvalues;
+        const vals = isPadj ? (g.padjs || []) : (g.pvalues || []);
         const pLabel = isPadj ? 'FDR' : 'P-value';
         return `Gene: ${g.geneName}<br>Score: ${g.consensusScore}<br>Category: ${g.category}<br>Log2FC: ${g.log2fc_median?.toFixed(2)}<br>${pLabel}: ${getMedianPvalue(vals).toExponential(2)}`;
       }),

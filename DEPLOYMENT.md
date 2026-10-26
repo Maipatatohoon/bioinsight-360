@@ -7,7 +7,7 @@ working backend.
 
 | Piece | Where | What |
 |-------|-------|------|
-| Frontend (Next.js) | Vercel | Client-side 6-pipeline consensus + dashboard; calls the backend for real DESeq2/edgeR/limma. |
+| Frontend (Next.js) | Vercel | Method-first results dashboard (DESeq2 / edgeR tabs), optional saved comparison, QC, pathways, export. |
 | Backend (FastAPI) | Docker / cloud host / Colab | Job queue, validation, QC; serves results. |
 | Worker (headless) | Google Colab (or any box with R) | Polls the backend, runs the R engines, uploads results. |
 
@@ -17,7 +17,11 @@ talks only to these routes (already implemented in `frontend/lib/backend_api.js`
 - `GET  /health`
 - `POST /api/analysis`
 - `GET  /api/analysis/{job_id}`
-- `GET  /api/analysis/{job_id}/results`
+- `GET  /api/analysis/{job_id}/results` (partial results are valid)
+- `GET  /api/analysis/{job_id}/method/{engine}`
+- `POST /api/analysis/{job_id}/comparison`
+- `GET  /api/analysis/{job_id}/comparison`
+- `GET  /api/analysis/{job_id}/comparison.csv`
 
 ## Quick path — Colab provides the backend
 
@@ -31,6 +35,8 @@ talks only to these routes (already implemented in `frontend/lib/backend_api.js`
    - **Bake it in:** set `NEXT_PUBLIC_BACKEND_URL` in Vercel → Settings → Environment
      Variables, then **Redeploy** (build-time value).
 4. Leave the worker cell running. Submit an analysis from the site; the worker computes it.
+   The Results page opens DESeq2 as soon as it finishes, shows edgeR independently, and
+   enables the optional comparison only after both saved tables exist.
 
 > `NEXT_PUBLIC_*` values are baked in at build time — changing the Vercel variable does not
 > update a running deployment without a redeploy. The in-app **Backend** control avoids that.
@@ -49,9 +55,11 @@ STEP 1 makes no network calls, so this is Colab's browser↔runtime link, not th
 - Confirm with a brand-new notebook running `print("hi")`. If that fails too, the
   notebook is not the cause.
 
-The runbook applies a backend hotfix automatically: DESeq2/edgeR/limma sometimes return
-`NA`/`Inf` for all-zero genes, which used to crash `GET /results` with
-`Out of range float values are not JSON compliant`. Those values are now sent as `null`.
+The runbook applies a **method-first compatibility overlay** automatically. It adds
+per-method status/result endpoints, partial-result handling, and the saved optional
+DESeq2-vs-edgeR comparison even if the backend repository still points at the older
+all-or-nothing API. `NA`/`Inf` statistics are serialized as `null`. STEP 9 verifies that the
+overlay is present before starting the backend.
 
 ## Production path — host the backend
 
@@ -77,10 +85,11 @@ docker run -p 7860:7860 \
   bioinsight-backend
 ```
 
-**Managed hosts:** the image runs as-is on **Hugging Face Spaces** (Docker SDK, port 7860),
-**Render**, **Fly.io**, **Railway**, or any VM. Set `BIOINSIGHT_WORKER_TOKEN` (and
+**Managed hosts:** the image runs on any container host with a persistent volume, such as
+**Render**, **Fly.io**, **Railway**, or a VM. Set `BIOINSIGHT_WORKER_TOKEN` (and
 `BIOINSIGHT_ENV=production`) as secrets, and mount a volume at **`/data`** so the SQLite
-job DB survives restarts.
+job DB survives restarts. The dissertation deployment remains the Colab backend + Vercel
+frontend path above.
 
 By default jobs wait for a worker (`BIOINSIGHT_RUNTIME=colab`). To run the R engines
 inside the container itself, set `BIOINSIGHT_RUNTIME=local` (the image already has R).
@@ -134,8 +143,9 @@ cd frontend && npm run dev   # http://localhost:3000
 Run the backend test suite:
 
 ```sh
-cd backend && ./.venv/bin/python -m unittest discover -s tests -t .
-# 19 tests: job lifecycle, worker, validation, HTTP workflow, cross-process claim
+cd backend && ./.venv/bin/python -m pytest -q
+# 61 tests: job lifecycle, validation, partial results, per-method failures,
+# saved comparison, worker incremental/aggregate fallback, cross-process claim
 ```
 
 ## Health check

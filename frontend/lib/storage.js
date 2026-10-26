@@ -1,5 +1,19 @@
 const memoryStore = new Map();
 
+// Small identifiers that must survive a page refresh *and* a new tab. Large
+// analysis payloads stay in memory/sessionStorage to avoid quota problems.
+const PERSISTENT_KEYS = new Set([
+    'currentJobId',
+    'analysisMode',
+    'downstreamSource',
+    'activeControlGroup',
+    'activeTreatedGroup',
+    'consensusFcThreshold',
+    'consensusPvalThreshold',
+    'consensusPvalMetric',
+    'cpmThreshold',
+]);
+
 export const Storage = {
     setItem: (key, value) => {
         // Always store in memory for unlimited size (works across Next.js Link navigations)
@@ -12,6 +26,13 @@ export const Storage = {
           } catch (e) {
               console.warn(`Storage quota exceeded for ${key}. Data stored in memory only. A page refresh will clear this data.`);
           }
+          if (PERSISTENT_KEYS.has(key)) {
+              try {
+                  localStorage.setItem(key, value);
+              } catch (e) {
+                  // Private-mode / disabled storage: sessionStorage is still enough for a refresh.
+              }
+          }
         }
     },
     getItem: (key) => {
@@ -20,9 +41,12 @@ export const Storage = {
             return memoryStore.get(key);
         }
         
-        // Fallback to sessionStorage
+        // Fallback to sessionStorage, then localStorage for durable identifiers
         if (typeof window !== 'undefined') {
-            const val = sessionStorage.getItem(key);
+            let val = sessionStorage.getItem(key);
+            if (val === null && PERSISTENT_KEYS.has(key)) {
+                val = localStorage.getItem(key);
+            }
             if (val !== null) {
                 memoryStore.set(key, val);
             }
@@ -34,6 +58,9 @@ export const Storage = {
         memoryStore.delete(key);
         if (typeof window !== 'undefined') {
             sessionStorage.removeItem(key);
+            if (PERSISTENT_KEYS.has(key)) {
+                localStorage.removeItem(key);
+            }
         }
     },
     clear: () => {

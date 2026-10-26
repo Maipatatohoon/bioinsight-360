@@ -29,13 +29,23 @@ export function formatDownstreamPipelines(deseq2, edger, limma) {
       const g = row.Gene_ID || row.Gene || row.id || row.ID;
       const idx = geneToIndex.get(g);
       if (idx !== undefined) {
+         // Do not substitute one metric for another or invent a zero
+         // fold-change. Missing values stay NaN so they cannot pass a threshold.
+         const parseMetric = (...values) => {
+             for (const value of values) {
+                 if (value === null || value === undefined || value === '') continue;
+                 const parsed = Number(value);
+                 if (Number.isFinite(parsed)) return parsed;
+             }
+             return NaN;
+         };
          results[idx] = {
              gene_index: idx,
-             log2fc: parseFloat(row.logFC ?? row.log2FoldChange ?? row['log2(FC)'] ?? 0),
+             log2fc: parseMetric(row.logFC, row.log2FoldChange, row['log2(FC)']),
              // Raw p-value aliases: DESeq2/edgeR (backend-normalised) and limma (raw CSV exports).
-             pvalue: parseFloat(row.pvalue ?? row.PValue ?? row['P.Value'] ?? row.pval ?? row['p.value'] ?? row.padj ?? row.FDR ?? row['adj.P.Val'] ?? 1),
+             pvalue: parseMetric(row.pvalue, row.PValue, row['P.Value'], row.pval, row['p.value']),
              // Adjusted p-value aliases, including limma's adj.P.Val.
-             padj: parseFloat(row.padj ?? row.FDR ?? row['adj.P.Val'] ?? row.qvalue ?? row.pvalue ?? row.PValue ?? row['P.Value'] ?? 1)
+             padj: parseMetric(row.padj, row.FDR, row['adj.P.Val'], row.qvalue)
           };
       }
     });
@@ -43,9 +53,9 @@ export function formatDownstreamPipelines(deseq2, edger, limma) {
   };
 
   const pipelines = [];
-  if (deseq2) pipelines.push({ name: 'DESeq2', results: createResults(deseq2) });
-  if (edger) pipelines.push({ name: 'edgeR', results: createResults(edger) });
-  if (limma) pipelines.push({ name: 'limma', results: createResults(limma) });
+  if (deseq2 && deseq2.length) pipelines.push({ name: 'DESeq2', results: createResults(deseq2) });
+  if (edger && edger.length) pipelines.push({ name: 'edgeR', results: createResults(edger) });
+  if (limma && limma.length) pipelines.push({ name: 'limma', results: createResults(limma) });
 
   return { pipelines, geneNames };
 }
@@ -106,11 +116,9 @@ export function computeConsensus(pipelines, geneNames, fcThreshold, pThreshold, 
         if (!isNaN(res.pvalue)) pvals.push(res.pvalue);
         if (!isNaN(res.padj)) padjs.push(res.padj);
 
-        const metricVal = activeMetric === 'pvalue'
-          ? (res.pvalue !== undefined ? res.pvalue : res.padj)
-          : (res.padj !== undefined ? res.padj : res.pvalue);
-
-        if (metricVal <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) {
+        const metricVal = activeMetric === 'pvalue' ? res.pvalue : res.padj;
+        if (Number.isFinite(metricVal) && Number.isFinite(res.log2fc)
+            && metricVal <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) {
           sigCount++;
           if (res.log2fc > 0) posDirs++;
           else if (res.log2fc < 0) negDirs++;
@@ -118,10 +126,15 @@ export function computeConsensus(pipelines, geneNames, fcThreshold, pThreshold, 
       }
     }
 
+    const directionConflict = posDirs > 0 && negDirs > 0;
     consensusResults.push({
       geneName: geneNames[i],
       consensusScore: sigCount,
-      category: classifyGene(sigCount, pipelines.length),
+      totalPipelines: pipelines.length,
+      // Opposite directions cannot be a consensus no matter how many methods
+      // called the gene significant.
+      category: directionConflict ? 'direction_conflict' : classifyGene(sigCount, pipelines.length),
+      directionConflict,
       log2fc_median: median(l2fcs),
       pvalues: pvals,
       padjs: padjs,
@@ -205,11 +218,9 @@ export function computePairwiseJaccard(pipelines, fcThreshold, pThreshold, pMetr
     const s = new Set();
     pipe.results.forEach(res => {
       if (res) {
-        const metricVal = activeMetric === 'pvalue'
-          ? (res.pvalue !== undefined ? res.pvalue : res.padj)
-          : (res.padj !== undefined ? res.padj : res.pvalue);
-
-        if (metricVal <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) {
+        const metricVal = activeMetric === 'pvalue' ? res.pvalue : res.padj;
+        if (Number.isFinite(metricVal) && Number.isFinite(res.log2fc)
+            && metricVal <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) {
           s.add(res.gene_index);
         }
       }

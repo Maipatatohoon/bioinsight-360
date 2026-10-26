@@ -6,6 +6,7 @@ import { computeConsensus, computeFleissKappa } from '../../lib/consensus';
 import { loadDownstreamPipelines } from '../../lib/downstreamData';
 import { computePathwayConsensus } from '../../lib/enrichment';
 import { runGProfilerEnrichment } from '../../lib/gprofiler_api';
+import { getJobStatus } from '../../lib/backend_api';
 
 export default function ExportPage() {
   // Minimal CSV row parser — handles quoted fields
@@ -23,11 +24,13 @@ export default function ExportPage() {
   }
   const [summaryData, setSummaryData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pathwaysError, setPathwaysError] = useState(null);
 
   useEffect(() => {
     async function computeSummary() {
       try {
         setLoading(true);
+        setPathwaysError(null);
         const analysisMode = Storage.getItem('analysisMode') || 'compute';
         let pData, consensus;
         let sampleNames = [];
@@ -38,7 +41,9 @@ export default function ExportPage() {
         if (analysisMode === 'downstream') {
           pData = await loadDownstreamPipelines();
           geneNames = pData.geneNames;
-          
+          const activeControlGroup = (Storage.getItem('activeControlGroup') || 'Control').toLowerCase();
+          const activeTreatedGroup = (Storage.getItem('activeTreatedGroup') || 'Treated').toLowerCase();
+
           const rawMetaCSV = Storage.getItem('rawMetadata');
           if (rawMetaCSV) {
             const metaLines = rawMetaCSV.trim().split('\n');
@@ -50,13 +55,31 @@ export default function ExportPage() {
               sampleNames.push(s);
             }
             sampleNames.forEach((name, idx) => {
-              const group = groupMap[name] || (idx % 2 === 0 ? 'control' : 'treated');
-              if (group.includes('control') || group.includes('untreated')) {
-                controlIndices.push(idx);
-              } else {
-                treatedIndices.push(idx);
-              }
+              const group = groupMap[name] || '';
+              if (group === activeControlGroup) controlIndices.push(idx);
+              else if (group === activeTreatedGroup) treatedIndices.push(idx);
             });
+          }
+
+          // After a browser restart, the small metadata CSV may be unavailable.
+          // Recover the real sample/group labels from the saved QC payload rather
+          // than inventing an alternating assignment.
+          if (!sampleNames.length) {
+            const jobId = Storage.getItem('currentJobId');
+            if (jobId) {
+              try {
+                const status = await getJobStatus(jobId);
+                const qc = status.qc_data || {};
+                sampleNames = qc.sampleNames || [];
+                const groups = (qc.sampleGroups || []).map((g) => String(g).toLowerCase());
+                sampleNames.forEach((name, idx) => {
+                  if (groups[idx] === activeControlGroup) controlIndices.push(idx);
+                  else if (groups[idx] === activeTreatedGroup) treatedIndices.push(idx);
+                });
+              } catch (err) {
+                console.warn('Could not recover sample groups for the report:', err);
+              }
+            }
           }
         } else {
           let rawCountsCSV = Storage.getItem('filteredCounts') || Storage.getItem('rawCounts');
@@ -111,7 +134,7 @@ export default function ExportPage() {
           sampleNames.forEach((name, idx) => {
             const matchKey = Object.keys(groupMap).find(k => k === name) ||
                              Object.keys(groupMap).find(k => k.toLowerCase() === name.toLowerCase());
-            const group = matchKey ? groupMap[matchKey] : (idx % 2 === 0 ? cGroup : tGroup);
+            const group = matchKey ? groupMap[matchKey] : '';
             const gLower = (group || '').toLowerCase();
             if (gLower === 'exclude') return; // Do not include excluded samples
             if (gLower === cGroup) {
@@ -138,7 +161,9 @@ export default function ExportPage() {
         // Read thresholds set by user on Consensus page
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
-        const userMetric = Storage.getItem('consensusPvalMetric') || (analysisMode === 'downstream' ? 'padj' : 'pvalue');
+        const userMetric = analysisMode === 'downstream'
+          ? 'padj'
+          : (Storage.getItem('consensusPvalMetric') || 'pvalue');
 
         consensus = computeConsensus(pData.pipelines, geneNames, userFc, userPval, userMetric);
 
@@ -151,8 +176,9 @@ export default function ExportPage() {
         pData.pipelines.forEach((pipe, pIdx) => {
           pipe.results.forEach((res, gIdx) => {
             if (res) {
-              const mVal = userMetric === 'pvalue' ? (res.pvalue !== undefined ? res.pvalue : res.padj) : (res.padj !== undefined ? res.padj : res.pvalue);
-              if (Math.abs(res.log2fc) >= userFc && mVal <= userPval) {
+              const mVal = userMetric === 'pvalue' ? res.pvalue : res.padj;
+              if (Number.isFinite(mVal) && Number.isFinite(res.log2fc)
+                  && Math.abs(res.log2fc) >= userFc && mVal <= userPval) {
                 const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
                 if (binaryMatrix[actualIdx]) {
                   binaryMatrix[actualIdx][pIdx] = 1;
@@ -165,27 +191,39 @@ export default function ExportPage() {
 
 
         // Pathways
-        const pipelineEnrichments = await Promise.all(pData.pipelines.map(async pipe => {
-          const degs = pipe.results
-            .filter(r => {
-              if (!r) return false;
-              const mVal = userMetric === 'pvalue' ? (r.pvalue !== undefined ? r.pvalue : r.padj) : (r.padj !== undefined ? r.padj : r.pvalue);
-              return Math.abs(r.log2fc) >= userFc && mVal <= userPval;
-            })
-            .map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i])
-            .filter(Boolean);
-          if (degs.length === 0) return [];
-          return await runGProfilerEnrichment(degs, experimentUniverse, 'hsapiens');
-        }));
-        const pathways = computePathwayConsensus(pipelineEnrichments, 0.2);
+        let pathways = [];
+        try {
+          const pipelineEnrichments = await Promise.all(pData.pipelines.map(async pipe => {
+            const degs = pipe.results
+              .filter(r => {
+                if (!r) return false;
+                const mVal = userMetric === 'pvalue' ? r.pvalue : r.padj;
+                return Number.isFinite(mVal) && Number.isFinite(r.log2fc)
+                  && Math.abs(r.log2fc) >= userFc && mVal <= userPval;
+              })
+              .map((r, i) => geneNames[r.gene_index !== undefined ? r.gene_index : i])
+              .filter(Boolean);
+            if (degs.length === 0) return [];
+            return await runGProfilerEnrichment(degs, experimentUniverse, 'hsapiens');
+          }));
+          pathways = computePathwayConsensus(pipelineEnrichments, 0.2);
+        } catch (error) {
+          // The expression/consensus report is still valid if the optional
+          // external enrichment service is unavailable; state that explicitly.
+          console.error('Pathway enrichment unavailable for export:', error);
+          setPathwaysError(error.message || 'g:Profiler request failed');
+        }
 
         setSummaryData({
           sampleNames,
           geneNames,
           controlCount: controlIndices.length,
           treatedCount: treatedIndices.length,
+          controlLabel: Storage.getItem('activeControlGroup') || 'Control',
+          treatedLabel: Storage.getItem('activeTreatedGroup') || 'Treated',
           consensus,
           pipelines: pData.pipelines,
+          pipelineCount: pData.pipelines.length,
           fleissKappa: kappa,
           pathways
         });
@@ -235,13 +273,14 @@ export default function ExportPage() {
     summaryData.pipelines.forEach(p => {
       p.results.forEach(r => {
         if (r) {
+          const finite = (value) => Number.isFinite(Number(value));
           rows.push([
             summaryData.geneNames[r.gene_index] || 'Unknown',
             `"${p.name}"`,
-            r.log2fc.toFixed(3),
-            r.pvalue ? r.pvalue.toExponential(4) : (r.padj ? r.padj.toExponential(4) : "1e+00"),
-            r.padj ? r.padj.toExponential(4) : "1e+00",
-            r.cohens_d ? r.cohens_d.toFixed(3) : "NA"
+            finite(r.log2fc) ? Number(r.log2fc).toFixed(3) : 'NA',
+            finite(r.pvalue) ? Number(r.pvalue).toExponential(4) : 'NA',
+            finite(r.padj) ? Number(r.padj).toExponential(4) : 'NA',
+            finite(r.cohens_d) ? Number(r.cohens_d).toFixed(3) : 'NA'
           ]);
         }
       });
@@ -288,7 +327,7 @@ export default function ExportPage() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', color: '#0f172a' }}>
         <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
         <h2 style={{ color: '#d97706', marginBottom: '0.5rem' }}>Preparing Export Data & Executive Summary...</h2>
-        <p style={{ color: '#1e293b' }}>Aggregating 6 pipeline outputs, consensus scores, and pathway stability metrics</p>
+        <p style={{ color: '#1e293b' }}>Aggregating saved method outputs, consensus scores, and pathway stability metrics</p>
       </div>
     );
   }
@@ -297,9 +336,9 @@ export default function ExportPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', color: '#0f172a', padding: '2rem' }}>
         <h2 style={{ color: '#dc2626', marginBottom: '1rem' }}>⚠️ Analysis Not Found</h2>
-        <p style={{ color: '#1e293b', marginBottom: '2rem' }}>Please run the consensus analysis first or wait for processing to finish.</p>
+        <p style={{ color: '#1e293b', marginBottom: '2rem' }}>Please open the results page and wait for at least one method to finish.</p>
         <button onClick={() => window.location.href='/consensus'} className="btn-primary" style={{ padding: '0.75rem 1.5rem', fontWeight: 'bold' }}>
-          Go to Consensus Dashboard
+          Go to Results
         </button>
       </div>
     );
@@ -310,18 +349,34 @@ export default function ExportPage() {
     geneNames,
     controlCount,
     treatedCount,
+    controlLabel = 'Control',
+    treatedLabel = 'Treated',
     consensus,
+    pipelines,
     fleissKappa,
     pathways
   } = summaryData;
 
-  const totalConsensusDEGs = consensus.filter(c => c.category === 'high_confidence' || c.category === 'moderate_confidence').length;
-  const highConfDEGs = consensus.filter(c => c.category === 'high_confidence').length;
+  const methodCount = pipelines?.length || 0;
+  // A consensus call requires every included method to be significant *and*
+  // to agree on direction. With only one completed method there is no
+  // cross-method consensus at all, so the report must not label its DEGs as one.
+  const strictConsensus = methodCount >= 2
+    ? consensus.filter((call) => {
+        const directions = call.directions || { positive: 0, negative: 0 };
+        return call.consensusScore === methodCount
+          && !(directions.positive > 0 && directions.negative > 0);
+      })
+    : [];
+  const totalConsensusDEGs = strictConsensus.length;
+  const pipelineList = (pipelines || []).map((pipeline) => pipeline.name).join(', ') || 'no completed method';
   const topPathways = pathways.filter(p => p.category === 'high_confidence').map(p => p.name).slice(0, 3).join(', ');
 
-  let kappaLabel = 'Substantial Agreement';
-  if (fleissKappa > 0.8) kappaLabel = 'Almost Perfect Agreement';
-  else if (fleissKappa < 0.4) kappaLabel = 'Moderate Agreement';
+  const kappaAvailable = methodCount >= 2 && Number.isFinite(fleissKappa);
+  const kappaDisplay = kappaAvailable ? fleissKappa.toFixed(2) : '—';
+  let kappaLabel = methodCount < 2 ? 'needs at least two methods' : 'Substantial Agreement';
+  if (kappaAvailable && fleissKappa > 0.8) kappaLabel = 'Almost Perfect Agreement';
+  else if (kappaAvailable && fleissKappa < 0.4) kappaLabel = 'Moderate Agreement';
 
   return (
     <div style={{ padding: '2rem', color: '#0f172a', minHeight: '100vh', maxWidth: '1200px', margin: '0 auto' }}>
@@ -349,7 +404,7 @@ export default function ExportPage() {
           style={{ padding: '1.5rem', border: '1px solid #0d9488', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s', textAlign: 'center' }}
         >
           <span style={{ fontSize: '2rem' }}></span>
-          <span style={{ fontWeight: 'bold', color: '#0f172a' }}>Full 6-Pipeline Results</span>
+          <span style={{ fontWeight: 'bold', color: '#0f172a' }}>Full Method Results</span>
           <span style={{ fontSize: '0.8rem', color: '#0d9488', background: 'rgba(139, 92, 246, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>CSV Format</span>
         </button>
 
@@ -374,6 +429,21 @@ export default function ExportPage() {
         </button>
       </div>
 
+      {pathwaysError && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }}>
+          <strong>Functional enrichment unavailable.</strong> The differential-expression results and
+          method CSVs are unaffected. g:Profiler said: {pathwaysError}
+        </div>
+      )}
+
+      {methodCount < 2 && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }}>
+          <strong>Partial analysis.</strong> Only {methodCount} method{methodCount === 1 ? ' is' : 's are'} available.
+          Individual results and pathways remain usable, but a cross-method consensus is not claimed
+          until at least two methods have completed.
+        </div>
+      )}
+
       {/* Executive Summary Printable Card */}
       <div id="pdf-report-content" className="glass-card" style={{ padding: '3rem', maxWidth: '950px', margin: '0 auto', border: '1px solid rgba(15, 23, 42, 0.1)', background: '#ffffff' }}>
         <div style={{ borderBottom: '2px solid rgba(15, 23, 42, 0.1)', paddingBottom: '1.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -397,7 +467,7 @@ export default function ExportPage() {
                 <span style={{ color: '#334155', display: 'inline-block', width: '140px', fontWeight: '600' }}>Total Genes:</span> <strong>{geneNames.length}</strong>
               </li>
               <li style={{ padding: '0.5rem 0' }}>
-                <span style={{ color: '#334155', display: 'inline-block', width: '140px', fontWeight: '600' }}>Experimental Groups:</span> <strong>Control ({controlCount}), Treated ({treatedCount})</strong>
+                <span style={{ color: '#334155', display: 'inline-block', width: '140px', fontWeight: '600' }}>Experimental Groups:</span> <strong>{controlLabel} ({controlCount}), {treatedLabel} ({treatedCount})</strong>
               </li>
             </ul>
           </div>
@@ -406,13 +476,13 @@ export default function ExportPage() {
             <h4 style={{ color: '#0f172a', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '0.85rem', letterSpacing: '0.05em', fontWeight: '800' }}>Consensus Metrics</h4>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, color: '#0f172a' }}>
               <li style={{ padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                <span style={{ color: '#334155', display: 'inline-block', width: '160px', fontWeight: '600' }}>Total Consensus DEGs:</span> <strong style={{ color: '#059669', fontWeight: '800' }}>{totalConsensusDEGs}</strong> ({highConfDEGs} High Conf.)
+                <span style={{ color: '#334155', display: 'inline-block', width: '160px', fontWeight: '600' }}>Total Consensus DEGs:</span> <strong style={{ color: '#059669', fontWeight: '800' }}>{totalConsensusDEGs}</strong> ({methodCount >= 2 ? 'all included methods' : 'needs at least two methods'})
               </li>
               <li style={{ padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                <span style={{ color: '#334155', display: 'inline-block', width: '160px', fontWeight: '600' }}>Fleiss' Kappa Score:</span> <strong style={{ color: '#2563eb', fontWeight: '800' }}>κ = {fleissKappa.toFixed(2)}</strong> ({kappaLabel})
+                <span style={{ color: '#334155', display: 'inline-block', width: '160px', fontWeight: '600' }}>Fleiss' Kappa Score:</span> <strong style={{ color: '#2563eb', fontWeight: '800' }}>κ = {kappaDisplay}</strong> ({kappaLabel})
               </li>
               <li style={{ padding: '0.5rem 0' }}>
-                <span style={{ color: '#334155', display: 'inline-block', width: '160px', fontWeight: '600' }}>Top Stable Pathways:</span> <strong style={{ color: '#0f172a' }}>{topPathways || 'None Significant'}</strong>
+                <span style={{ color: '#334155', display: 'inline-block', width: '160px', fontWeight: '600' }}>Top Stable Pathways:</span> <strong style={{ color: '#0f172a' }}>{pathwaysError ? 'Unavailable — g:Profiler failed' : (topPathways || 'No high-confidence consensus term')}</strong>
               </li>
             </ul>
           </div>
@@ -421,11 +491,11 @@ export default function ExportPage() {
         <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '1.5rem', color: '#0f172a', lineHeight: '1.6' }}>
           {totalConsensusDEGs > 0 ? (
             <p style={{ margin: 0 }}>
-              This report outlines findings derived from 6 distinct statistical pipelines (CPM+t-test, CPM+MW, UQ+t-test, UQ+MW, MoR+t-test, MoR+MW). The <strong style={{ color: '#0284c7', fontSize: '1.1rem' }}>{totalConsensusDEGs} genes</strong> classified as Consensus DEGs demonstrate robust differential expression regardless of the normalization or statistical method applied, representing highly reliable biological signals suitable for downstream experimental validation.
+              This report outlines findings derived from {pipelines?.length || 0} saved statistical method(s) ({pipelineList}). The <strong style={{ color: '#0284c7', fontSize: '1.1rem' }}>{totalConsensusDEGs} genes</strong> classified as Consensus DEGs are significant in the same direction in every included method. This is agreement across the stated methods and thresholds, not proof of biological effect; candidates still require independent validation.
             </p>
           ) : (
             <p style={{ margin: 0 }}>
-              This report outlines findings derived from 6 distinct statistical pipelines. <strong style={{ color: '#0284c7', fontSize: '1.1rem' }}>No genes</strong> were classified as Consensus DEGs under the current thresholds. This indicates that either the experimental condition did not induce strong, widespread transcriptional changes among these {geneNames.length} genes, or the variance between biological replicates was too high to achieve statistical significance across multiple methodologies.
+              This report outlines findings derived from {pipelines?.length || 0} saved statistical method(s) ({pipelineList}). <strong style={{ color: '#0284c7', fontSize: '1.1rem' }}>No genes</strong> were classified as Consensus DEGs under the current thresholds. This indicates that either the experimental condition did not induce strong, widespread transcriptional changes among these {geneNames.length} genes, or the variance between biological replicates was too high to achieve statistical significance across multiple methodologies.
             </p>
           )}
         </div>

@@ -12,31 +12,28 @@ export default function PCAScatter({ pcaData }) {
 
   const { pc1, pc2, sampleNames = [], sampleGroups = [], varianceExplained = [0, 0] } = pcaData;
 
-  const controlIndices = sampleGroups.map((g, i) => (g || '').toLowerCase().includes('control') ? i : -1).filter(i => i !== -1);
-  const treatedIndices = sampleGroups.map((g, i) => (g || '').toLowerCase().includes('control') ? -1 : i).filter(i => i !== -1);
-
-  const traces = [
-    {
-      x: controlIndices.map(i => pc1[i]),
-      y: controlIndices.map(i => pc2[i]),
-      text: controlIndices.map(i => sampleNames[i]),
+  // Colour by the real metadata group labels. The old binary Control/Treated
+  // split mislabelled WT/KO, vehicle/drug and other designs.
+  const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#0891b2', '#84cc16'];
+  const labels = sampleGroups.map((group) => {
+    const text = String(group ?? '').trim();
+    return text || 'Unknown';
+  });
+  const groupOrder = Array.from(new Set(labels));
+  const traces = groupOrder.map((group, groupIndex) => {
+    const indices = labels.map((label, index) => (label === group ? index : -1)).filter((index) => index !== -1);
+    return {
+      x: indices.map((index) => pc1[index]),
+      y: indices.map((index) => pc2[index]),
+      text: indices.map((index) => sampleNames[index] || ''),
       mode: 'markers+text',
       type: 'scatter',
-      name: 'Control',
-      marker: { color: '#3b82f6', size: 10 },
-      textposition: 'top center'
-    },
-    {
-      x: treatedIndices.map(i => pc1[i]),
-      y: treatedIndices.map(i => pc2[i]),
-      text: treatedIndices.map(i => sampleNames[i]),
-      mode: 'markers+text',
-      type: 'scatter',
-      name: 'Treated',
-      marker: { color: '#ef4444', size: 10 },
-      textposition: 'top center'
-    }
-  ];
+      name: group,
+      marker: { color: palette[groupIndex % palette.length], size: 10 },
+      textposition: 'top center',
+      hovertemplate: '%{text}<br>PC1: %{x:.3f}<br>PC2: %{y:.3f}<extra></extra>',
+    };
+  });
 
   return (
     <div className="w-full h-full min-h-[400px]">

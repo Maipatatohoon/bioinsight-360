@@ -28,7 +28,7 @@ export default function AgreementHeatmap({ pipelines = [], consensusResults = []
       const pipeline = pipelines.find(p => p.name === pipelineName);
       if (!pipeline || gIdx === undefined) return 0;
       const res = pipeline.results[gIdx];
-      const metricVal = res ? (activeMetric === 'pvalue' ? (res.pvalue !== undefined ? res.pvalue : res.padj) : (res.padj !== undefined ? res.padj : res.pvalue)) : 1;
+      const metricVal = res ? (activeMetric === 'pvalue' ? res.pvalue : res.padj) : 1;
       return (res && metricVal <= pThreshold && Math.abs(res.log2fc) >= fcThreshold) ? 1 : 0;
     });
   });

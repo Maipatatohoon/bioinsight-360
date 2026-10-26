@@ -113,6 +113,31 @@ export function processCountMatrix(rawText) {
     return { cleanData, sampleCols };
 }
 
+
+/**
+ * Counts alone do not contain biological group labels. Never invent an
+ * alternating split: mark every sample Unassigned and require a metadata file
+ * or explicit user assignment before an analysis can be submitted.
+ */
+export function buildUnassignedMetadata(sampleCols) {
+    return (sampleCols || []).map((sample) => ({ Sample: String(sample), Group: 'Unassigned' }));
+}
+
+export function selectMetadataRows(assignments, controlGroup, treatedGroup) {
+    const control = String(controlGroup || '').toLowerCase();
+    const treated = String(treatedGroup || '').toLowerCase();
+    return (assignments || [])
+        .filter((row) => {
+            const group = String(row.Group || row.group || '').toLowerCase();
+            return group === control || group === treated;
+        })
+        .map((row) => ({
+            Sample: String(row.Sample || row.sample || row.ID || row.id || row.Name || row.name || '').trim(),
+            Group: String(row.Group || row.group || '').trim(),
+        }))
+        .filter((row) => row.Sample && row.Group);
+}
+
 export default function UploadPage() {
     const router = useRouter();
     const [summary, setSummary] = useState(null);
@@ -158,15 +183,24 @@ export default function UploadPage() {
                 const { cleanData, sampleCols } = processCountMatrix(countsText);
                 const parsedMeta = Papa.parse(metaText, { header: true, skipEmptyLines: true });
 
-                // Canonicalize metadata to { Sample, Group }
-                const normalizedMeta = parsedMeta.data.map((d, i) => {
-                    const sample = d.Sample || d.sample || d.ID || d.id || d.Name || d.name || sampleCols[i] || `Sample_${i+1}`;
-                    const group = d.Group || d.group || d.condition || d.Condition || 'Control';
-                    return {
-                        Sample: String(sample).trim(),
-                        Group: String(group).trim()
-                    };
+                // Canonicalize metadata to one row per count-matrix sample.
+                // A missing group is Unassigned, never an invented Control.
+                const demoGroups = new Map();
+                parsedMeta.data.forEach((d) => {
+                    const sample = d.Sample || d.sample || d.ID || d.id || d.Name || d.name;
+                    if (!sample) return;
+                    const group = d.Group || d.group || d.condition || d.Condition || 'Unassigned';
+                    demoGroups.set(String(sample).trim(), String(group).trim());
                 });
+                const lowerDemoGroups = new Map(
+                    Array.from(demoGroups.entries()).map(([sample, group]) => [sample.toLowerCase(), group]),
+                );
+                const normalizedMeta = sampleCols.map((sample) => ({
+                    Sample: String(sample).trim(),
+                    Group: demoGroups.get(String(sample).trim())
+                        || lowerDemoGroups.get(String(sample).trim().toLowerCase())
+                        || 'Unassigned',
+                }));
 
                 const uGroups = Array.from(new Set(normalizedMeta.map(d => d.Group).filter(Boolean)));
                 setUniqueGroups([...uGroups, 'Exclude']);
@@ -190,6 +224,7 @@ export default function UploadPage() {
                 });
 
                 const cleanCSV = Papa.unparse(cleanData);
+                Storage.removeItem('currentJobId');
                 Storage.setItem('rawCounts', cleanCSV);
                 Storage.setItem('rawMetadata', Papa.unparse(normalizedMeta));
                 Storage.setItem('metaData', JSON.stringify(normalizedMeta));
@@ -270,17 +305,9 @@ export default function UploadPage() {
             }
 
             const { cleanData, sampleCols } = processCountMatrix(text);
+            const unassignedMeta = buildUnassignedMetadata(sampleCols);
 
-            // Generate mock metadata by splitting samples into two groups
-            const mockMeta = sampleCols.map((s, i) => ({
-                Sample: s,
-                Group: i < Math.floor(sampleCols.length / 2) ? 'Control' : 'Treated'
-            }));
-
-            const ctrlCount = mockMeta.filter(d => d.Group === 'Control').length;
-            const trtCount = mockMeta.filter(d => d.Group === 'Treated').length;
-
-            setUniqueGroups(['Control', 'Treated', 'Exclude']);
+            setUniqueGroups(['Unassigned', 'Control', 'Treated', 'Exclude']);
             setSelectedCtrl('Control');
             setSelectedTrt('Treated');
             Storage.setItem('activeControlGroup', 'Control');
@@ -289,17 +316,18 @@ export default function UploadPage() {
             setSummary({
                 genes: cleanData.length,
                 samples: sampleCols,
-                controlCount: ctrlCount,
-                treatedCount: trtCount
+                controlCount: 0,
+                treatedCount: 0
             });
 
-            setMetaAssignments(mockMeta);
+            setMetaAssignments(unassignedMeta);
 
             // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
             const cleanCSV = Papa.unparse(cleanData);
+            Storage.removeItem('currentJobId');
             Storage.setItem('rawCounts', cleanCSV);
-            Storage.setItem('rawMetadata', Papa.unparse(mockMeta));
-            Storage.setItem('metaData', JSON.stringify(mockMeta));
+            Storage.setItem('rawMetadata', Papa.unparse(unassignedMeta));
+            Storage.setItem('metaData', JSON.stringify(unassignedMeta));
 
             Storage.setItem('analysisMode', 'compute');
             // Clear stale artifacts from previous runs
@@ -416,13 +444,9 @@ export default function UploadPage() {
                                         }
 
                                         const { cleanData, sampleCols } = processCountMatrix(text);
+                                        const unassignedMeta = buildUnassignedMetadata(sampleCols);
 
-                                        const mockMeta = sampleCols.map((s, i) => ({
-                                            Sample: s,
-                                            Group: i < Math.floor(sampleCols.length / 2) ? 'Control' : 'Treated'
-                                        }));
-
-                                        setUniqueGroups(['Control', 'Treated', 'Exclude']);
+                                        setUniqueGroups(['Unassigned', 'Control', 'Treated', 'Exclude']);
                                         setSelectedCtrl('Control');
                                         setSelectedTrt('Treated');
                                         Storage.setItem('activeControlGroup', 'Control');
@@ -431,17 +455,18 @@ export default function UploadPage() {
                                         setSummary({
                                             genes: cleanData.length,
                                             samples: sampleCols,
-                                            controlCount: mockMeta.filter(d => d.Group === 'Control').length,
-                                            treatedCount: mockMeta.filter(d => d.Group === 'Treated').length
+                                            controlCount: 0,
+                                            treatedCount: 0
                                         });
 
-                                        setMetaAssignments(mockMeta);
+                                        setMetaAssignments(unassignedMeta);
 
                                         // Force conversion to strictly comma-separated CSV so our downstream manual parsers work
                                         const cleanCSV = Papa.unparse(cleanData);
+                                        Storage.removeItem('currentJobId');
                                         Storage.setItem('rawCounts', cleanCSV);
-                                        Storage.setItem('rawMetadata', Papa.unparse(mockMeta));
-                                        Storage.setItem('metaData', JSON.stringify(mockMeta));
+                                        Storage.setItem('rawMetadata', Papa.unparse(unassignedMeta));
+                                        Storage.setItem('metaData', JSON.stringify(unassignedMeta));
 
                                         Storage.setItem('analysisMode', 'compute');
                                         // Clear stale artifacts from previous runs
@@ -637,6 +662,13 @@ export default function UploadPage() {
                             ))}
                         </div>
 
+                        {metaAssignments.filter((row) => /^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length > 0 && (
+                            <div style={{ marginBottom: '1.5rem', padding: '0.9rem 1rem', borderRadius: '10px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.9rem' }}>
+                                <strong>{metaAssignments.filter((row) => /^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length} sample(s) are Unassigned/Exclude.</strong>{' '}
+                                Upload a metadata CSV or assign groups below. Only samples in the selected control and treatment groups will be submitted; groups need at least 2 replicates.
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                             <div>
                                 <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
@@ -668,7 +700,7 @@ export default function UploadPage() {
                                                 const sample = row[sampleHeader];
                                                 const group = groupHeader ? row[groupHeader] : row[Object.keys(row)[1]];
                                                 if (sample !== undefined && sample !== null && String(sample).trim() !== '') {
-                                                    metaObj[String(sample).trim()] = group !== undefined && group !== null ? String(group).trim() : 'Control';
+                                                    metaObj[String(sample).trim()] = group !== undefined && group !== null ? String(group).trim() : 'Unassigned';
                                                 }
                                             });
 
@@ -743,7 +775,7 @@ export default function UploadPage() {
                         <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
                             {metaAssignments.map((m, idx) => {
                                 const sampleName = m.Sample || m.sample || m.ID || m.id || m.Name || m.name || `Sample_${idx}`;
-                                const currentGroup = m.Group || m.group || 'Control';
+                                const currentGroup = m.Group || m.group || 'Unassigned';
                                 return (
                                 <div key={sampleName} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid #e2e8f0' }}>
                                     <span style={{ fontWeight: 500, color: currentGroup === 'Exclude' ? '#94a3b8' : '#0f172a' }}>{sampleName}</span>
@@ -821,41 +853,55 @@ export default function UploadPage() {
                                 setLoading(true);
                                 try {
                                     const countsStr = Storage.getItem('rawCounts');
-                                    const metaStr = Storage.getItem('rawMetadata');
-                                    if (!countsStr || !metaStr) {
-                                        throw new Error("Missing count or metadata.");
+                                    if (!countsStr) {
+                                        throw new Error("Missing count matrix. Re-upload the count file.");
                                     }
-                                    
+                                    if (selectedCtrl === selectedTrt) {
+                                        throw new Error("Control and treatment groups must be different.");
+                                    }
+
+                                    const selectedRows = selectMetadataRows(metaAssignments, selectedCtrl, selectedTrt);
+                                    const ctrlCount = selectedRows.filter((row) => row.Group.toLowerCase() === selectedCtrl.toLowerCase()).length;
+                                    const trtCount = selectedRows.filter((row) => row.Group.toLowerCase() === selectedTrt.toLowerCase()).length;
+                                    if (ctrlCount < 2 || trtCount < 2) {
+                                        throw new Error(
+                                            `Each selected group needs at least 2 samples. ` +
+                                            `Control (${selectedCtrl}): ${ctrlCount}; Treatment (${selectedTrt}): ${trtCount}. ` +
+                                            `Upload a metadata CSV or assign groups in the table above.`
+                                        );
+                                    }
+
+                                    const selectedMetadataCsv = Papa.unparse(selectedRows);
                                     const countsBlob = new Blob([countsStr], { type: 'text/csv' });
-                                    const metadataBlob = new Blob([metaStr], { type: 'text/csv' });
-                                    
-                                    // The backend validator renames whichever grouping column
-                                    // it resolves (here "Group") to "condition", and the R
-                                    // engines build their design around that name. So the
-                                    // design/contrast must refer to "condition", not "Group".
-                                    const safeLevel = /^[A-Za-z0-9.]+$/;
+                                    const metadataBlob = new Blob([selectedMetadataCsv], { type: 'text/csv' });
+
+                                    // The backend validator renames the grouping column to
+                                    // `condition`; the R scripts receive explicit numerator/
+                                    // denominator levels, so group names containing `_` or
+                                    // spaces keep their intended contrast direction.
                                     const params = {
                                         control_group: selectedCtrl,
                                         treated_group: selectedTrt,
                                         condition_col: 'Group',
                                         design: '~ condition'
                                     };
-                                    if (safeLevel.test(selectedTrt) && safeLevel.test(selectedCtrl)) {
-                                        // R scripts parse "<factor>_<numerator>_vs_<denominator>".
-                                        params.contrast = `condition_${selectedTrt}_vs_${selectedCtrl}`;
-                                    }
-                                    
+
                                     const jobRes = await submitAnalysisJob(countsBlob, metadataBlob, params);
-                                    
+
                                     Storage.setItem('currentJobId', jobRes.job_id);
                                     Storage.setItem('downstreamSource', 'job');
+                                    // Result pages read the three method tables from
+                                    // the backend job; mark that explicitly.
+                                    Storage.setItem('analysisMode', 'downstream');
                                     Storage.setItem('activeControlGroup', selectedCtrl);
                                     Storage.setItem('activeTreatedGroup', selectedTrt);
-                                    
-                                    // Offload heavy data from localStorage
+                                    Storage.setItem('rawMetadata', selectedMetadataCsv);
+                                    Storage.setItem('metaData', JSON.stringify(selectedRows));
+
+                                    // The count matrix is large; metadata is small and is
+                                    // retained so Export can report the real sample groups.
                                     Storage.removeItem('rawCounts');
-                                    Storage.removeItem('rawMetadata');
-                                    
+
                                     router.push('/qc');
                                 } catch (e) {
                                     const networkFailure =

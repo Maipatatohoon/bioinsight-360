@@ -89,7 +89,8 @@ export const getJobStatus = async (jobId) => {
 };
 
 /**
- * Retrieves completed job results.
+ * Retrieves saved job results. This succeeds with a partial payload while one
+ * method is still running, so completed methods can be rendered immediately.
  */
 export const getJobResults = async (jobId) => {
     const baseUrl = getBackendUrl();
@@ -104,5 +105,46 @@ export const getJobResults = async (jobId) => {
         throw new Error(errorData.detail || `Failed to fetch results for job ${jobId}`);
     }
     
+    return await response.json();
+};
+
+/** Retrieves one engine's table without waiting for the other engine. */
+export const getMethodResults = async (jobId, engine) => {
+    const baseUrl = getBackendUrl();
+    const response = await fetch(`${baseUrl}/api/analysis/${jobId}/method/${engine}`, { method: 'GET' });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || `Failed to fetch ${engine} results`);
+    }
+    return await response.json();
+};
+
+/** Runs the optional comparison from the job's saved DESeq2/edgeR tables. */
+export const compareMethods = async (jobId, { padjThreshold = 0.05, log2fcThreshold = 1.0 } = {}) => {
+    const baseUrl = getBackendUrl();
+    const response = await fetch(`${baseUrl}/api/analysis/${jobId}/comparison`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            padj_threshold: padjThreshold,
+            log2fc_threshold: log2fcThreshold,
+        }),
+    });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || 'Comparison failed');
+    }
+    return await response.json();
+};
+
+/** Returns a previously saved comparison, or null when none exists. */
+export const getSavedComparison = async (jobId) => {
+    const baseUrl = getBackendUrl();
+    const response = await fetch(`${baseUrl}/api/analysis/${jobId}/comparison`, { method: 'GET' });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || 'Could not load the saved comparison');
+    }
     return await response.json();
 };

@@ -67,8 +67,10 @@ export function runGOEnrichment(degList, goAnnotations, allGenes) {
 }
 
 /**
- * Computes pathway enrichment consensus across 6 pipelines.
- * @param {Array<Array<Object>>} pipelineEnrichments Array of 6 GO enrichment result arrays
+ * Computes pathway enrichment consensus across the completed pipelines.
+ * Categories scale with the number of methods actually compared instead of
+ * assuming the old six-pipeline design.
+ * @param {Array<Array<Object>>} pipelineEnrichments Array of per-method GO enrichment arrays
  * @param {number} pThreshold Significance threshold (default 0.05)
  */
 export function computePathwayConsensus(pipelineEnrichments, pThreshold = 0.05) {
@@ -82,6 +84,12 @@ export function computePathwayConsensus(pipelineEnrichments, pThreshold = 0.05) 
     if (!pipe) continue;
     
     for (const enrich of pipe) {
+      // Enrichment calls use the adjusted p-value only. A missing value cannot
+      // be replaced with a raw p-value, and an invalid record must not create
+      // a zero-count pathway entry.
+      const adjustedP = Number(enrich.padj);
+      if (!Number.isFinite(adjustedP)) continue;
+
       if (!pathwayMap.has(enrich.term)) {
         pathwayMap.set(enrich.term, {
           term: enrich.term,
@@ -95,11 +103,11 @@ export function computePathwayConsensus(pipelineEnrichments, pThreshold = 0.05) 
       }
       
       const item = pathwayMap.get(enrich.term);
-      item.pvalues.push(enrich.padj !== undefined ? enrich.padj : enrich.pvalue);
+      item.pvalues.push(adjustedP);
       item.overlaps.push(enrich.overlap);
-      enrich.overlappingGenes.forEach(g => item.allOverlappingGenes.add(g));
+      (enrich.overlappingGenes || []).forEach(g => item.allOverlappingGenes.add(g));
       
-      if (enrich.padj < pThreshold && enrich.overlap > 0) {
+      if (adjustedP < pThreshold && enrich.overlap > 0) {
         item.count++;
       }
     }
@@ -107,8 +115,9 @@ export function computePathwayConsensus(pipelineEnrichments, pThreshold = 0.05) 
   
   const results = Array.from(pathwayMap.values()).map(p => {
     let category = 'not_significant';
-    if (p.count >= 5) category = 'high_confidence';
-    else if (p.count >= 3) category = 'moderate_confidence';
+    const moderateCutoff = Math.max(2, Math.ceil(numPipelines * 0.6));
+    if (p.count >= numPipelines) category = 'high_confidence';
+    else if (p.count >= moderateCutoff) category = 'moderate_confidence';
     else if (p.count >= 1) category = 'method_sensitive';
     
     const sortedPvalues = [...p.pvalues].sort((a, b) => a - b);

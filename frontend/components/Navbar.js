@@ -8,7 +8,7 @@ import BackendSettings from './BackendSettings';
 const LINKS = [
   { href: '/upload', label: 'Upload' },
   { href: '/qc', label: 'QC' },
-  { href: '/consensus', label: 'Consensus' },
+  { href: '/consensus', label: 'Results' },
   { href: '/pathways', label: 'Pathways' },
   { href: '/export', label: 'Export' },
 ];

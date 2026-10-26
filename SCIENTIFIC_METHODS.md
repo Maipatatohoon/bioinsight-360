@@ -40,7 +40,18 @@ BioInsight 360 integrates three gold-standard, peer-reviewed Bioconductor differ
   $$J(A, B) = \frac{|A \cap B|}{|A \cup B|}$$
   Measures overall DEG list concordance between engine pairs ($A$ and $B$).
 
-- **Consensus DEG Categorization:**
-  - **High-Confidence DEGs:** Significant in $\ge 80\%$ of active engines with consistent fold-change direction.
-  - **Moderate-Confidence DEGs:** Significant in $\ge 50\%$ of active engines.
-  - **Method-Sensitive DEGs:** Significant in only 1 engine (method-specific artifact candidate).
+- **Consensus DEG Categorization:** Significance always uses the adjusted p-value
+  (Benjamini-Hochberg FDR); a raw p-value is never substituted when `padj` is NA.
+  - **High-Confidence DEGs:** Significant in all included methods and agreeing on
+    direction (at least 80% agreement in the legacy multi-pipeline view).
+  - **Moderate-Confidence DEGs:** Significant in 50–79% of included methods.
+  - **Method-Sensitive DEGs:** Significant in a minority of methods (method-specific
+    candidate).
+  - **Direction Conflict:** Significant in multiple methods but with opposite
+    fold-change signs. This is never a consensus call.
+
+- **No missing-count imputation:** missing or non-finite count cells are rejected, not replaced with zero.
+- **Strict DESeq2-vs-edgeR comparison:** the job-level comparison requires both
+  methods to be significant at the chosen adjusted-p-value and |log2FC| thresholds
+  and to agree on direction. It is computed only from the saved result tables, so it
+  never re-runs R and never fabricates a combined p-value.

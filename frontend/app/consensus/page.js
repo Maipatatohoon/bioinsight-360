@@ -11,6 +11,7 @@ import DEGTable from '../../components/DEGTable';
 import { computeConsensus, computePairwiseJaccard, computeFleissKappa } from '../../lib/consensus';
 import { loadDownstreamPipelines } from '../../lib/downstreamData';
 import { motion } from 'framer-motion';
+import JobResultsDashboard from '../../components/JobResultsDashboard';
 
 // Minimal CSV row parser — handles quoted fields (avoids split(',') breaking on gene descriptions)
 function parseCSVRow(line) {
@@ -26,7 +27,7 @@ function parseCSVRow(line) {
   return result;
 }
 
-function ConsensusPageContent() {
+function LegacyConsensusPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [fc, setFc] = useState(() => {
@@ -55,13 +56,14 @@ function ConsensusPageContent() {
       try {
         setLoading(true);
         const mode = Storage.getItem('analysisMode') || 'compute';
+        const jobId = searchParams.get('jobId');
+        const isDownstreamMode = mode === 'downstream' || Boolean(jobId);
         setAnalysisMode(mode);
 
         // Defer heavy computation so loading spinner renders first
         await new Promise(resolve => setTimeout(resolve, 50));
 
         let pData;
-        const jobId = searchParams.get('jobId');
         
         if (mode === 'downstream' || jobId) {
           if (jobId) {
@@ -80,7 +82,9 @@ function ConsensusPageContent() {
 
         setPipelineData(pData);
 
-        const initialMetric = Storage.getItem('consensusPvalMetric') || (mode === 'downstream' ? 'padj' : 'pvalue');
+        const initialMetric = isDownstreamMode
+          ? 'padj'
+          : (Storage.getItem('consensusPvalMetric') || 'pvalue');
         setPvalMetric(initialMetric);
 
         // Compute Consensus & Agreement Metrics
@@ -114,9 +118,7 @@ function ConsensusPageContent() {
     pData.pipelines.forEach((pipe, pIdx) => {
       pipe.results.forEach((res, gIdx) => {
         if (res) {
-          const metricVal = activeMetric === 'pvalue'
-            ? (res.pvalue !== undefined ? res.pvalue : res.padj)
-            : (res.padj !== undefined ? res.padj : res.pvalue);
+          const metricVal = activeMetric === 'pvalue' ? res.pvalue : res.padj;
 
           if (Math.abs(res.log2fc) >= currentFc && metricVal <= currentPval) {
             const actualIdx = res.gene_index !== undefined ? res.gene_index : gIdx;
@@ -149,6 +151,7 @@ function ConsensusPageContent() {
   }, [pipelineData, pvalMetric]);
 
   const handleMetricChange = (newMetric) => {
+    if (analysisMode === 'downstream' && newMetric !== 'padj') return;
     setPvalMetric(newMetric);
     Storage.setItem('consensusPvalMetric', newMetric);
     if (pipelineData) {
@@ -258,18 +261,22 @@ function ConsensusPageContent() {
           <div style={{ display: 'flex', background: 'rgba(226, 232, 240, 0.7)', borderRadius: '8px', padding: '3px' }}>
             <button
               onClick={() => handleMetricChange('pvalue')}
+              disabled={analysisMode === 'downstream'}
               style={{
                 padding: '0.4rem 0.8rem',
                 borderRadius: '6px',
                 border: 'none',
-                cursor: 'pointer',
+                cursor: analysisMode === 'downstream' ? 'not-allowed' : 'pointer',
                 fontSize: '0.8rem',
                 fontWeight: 'bold',
+                opacity: analysisMode === 'downstream' ? 0.45 : 1,
                 background: pvalMetric === 'pvalue' ? '#0284c7' : 'transparent',
                 color: pvalMetric === 'pvalue' ? '#fff' : '#475569',
                 transition: 'all 0.2s'
               }}
-              title="Raw p-value (standard for exploratory rank/asymptotic testing on small samples)"
+              title={analysisMode === 'downstream'
+                ? 'Backend results use adjusted p-values only. Raw p-values are never substituted.'
+                : 'Raw p-value for a precomputed DEG table without adjusted p-values'}
             >
               Raw p-value
             </button>
@@ -478,7 +485,7 @@ function ConsensusPageContent() {
                             const res = pipe.results.find(r => r && r.gene_index === selectedGene.geneName);
                             // gene_index in downstream is numerical, but geneName was pushed into geneNames array
                             const targetRes = pipe.results.find(r => r && pipelineData.geneNames[r.gene_index] === selectedGene.geneName) || res;
-                            const mVal = targetRes ? (pvalMetric === 'pvalue' ? (targetRes.pvalue ?? targetRes.padj) : (targetRes.padj ?? targetRes.pvalue)) : 1;
+                            const mVal = targetRes ? (pvalMetric === 'pvalue' ? targetRes.pvalue : targetRes.padj) : 1;
                             const isSig = targetRes && mVal <= parseFloat(pval) && Math.abs(targetRes.log2fc) >= parseFloat(fc);
                             return (
                               <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', background: 'rgba(226, 232, 240, 0.5)', borderRadius: '4px' }}>
@@ -532,7 +539,7 @@ function ConsensusPageContent() {
                   {pipelineData.pipelines.map((pipe, idx) => {
                     const sigCount = pipe.results.filter(r => {
                       if (!r) return false;
-                      const mVal = pvalMetric === 'pvalue' ? (r.pvalue ?? r.padj) : (r.padj ?? r.pvalue);
+                      const mVal = pvalMetric === 'pvalue' ? r.pvalue : r.padj;
                       return Math.abs(r.log2fc) >= parseFloat(fc) && mVal <= parseFloat(pval);
                     }).length;
                     return (
@@ -643,6 +650,22 @@ function ConsensusPageContent() {
       )}
     </motion.div>
   );
+}
+
+function ConsensusPageContent() {
+  const searchParams = useSearchParams();
+  const queryJobId = searchParams.get('jobId');
+  const mode = typeof window !== 'undefined' ? Storage.getItem('analysisMode') : null;
+  const storedJobId = typeof window !== 'undefined' ? Storage.getItem('currentJobId') : null;
+  const jobId = queryJobId || (mode === 'downstream' ? storedJobId : null);
+
+  if (jobId) {
+    return <JobResultsDashboard jobId={jobId} />;
+  }
+
+  // Pre-computed/pipeline-upload mode keeps the existing multi-method consensus
+  // page; backend analysis jobs use the method-first dashboard above.
+  return <LegacyConsensusPage />;
 }
 
 export default function ConsensusPage() {

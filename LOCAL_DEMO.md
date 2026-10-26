@@ -35,8 +35,9 @@ enough.
 
 1. **Upload** → *Load Demo Data* → *Continue*.
 2. **QC** should finish and show 8 samples.
-3. **Consensus** should show DESeq2 / edgeR / limma results (~11 / ~10 / ~10
-   genes at padj < 0.05).
+3. **Results** shows DESeq2 and edgeR as soon as each finishes. Open each tab
+   independently; the comparison is optional and only becomes available when both
+   saved tables exist. limma-voom is an optional third view.
 4. **Pathways** calls g:Profiler from the browser (network required).
 5. **Export** downloads the tables.
 
@@ -61,7 +62,7 @@ bash scripts/stop-local.sh
 | --- | --- |
 | `Address already in use` on 8000 | `pkill -f "uvicorn app.main:app"` then rerun |
 | `R environment missing` | run `bash scripts/setup-local-r.sh` again |
-| Job fails with `object 'condition' not found` | caller sent no usable grouping column; send `condition_col` plus `design='~ condition'` |
+| Job fails with `object 'condition' not found` | caller sent no usable grouping column; send `condition_col`, `control_group`, `treated_group` and `design='~ condition'` |
 | Job fails with `object 'Group' not found` | old backend + new caller mismatch; update the backend (`git -C ~/bioinsight-backend pull`) |
 | Site shows "backend offline" | open the `?backend=http://localhost:8000` URL once to reset the saved URL |
 | Port 3000 is stale | `bash scripts/stop-local.sh` then `bash scripts/start-local.sh` |

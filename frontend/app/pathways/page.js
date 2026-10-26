@@ -29,6 +29,7 @@ export default function PathwaysPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [pathwayConsensus, setPathwayConsensus] = useState([]);
+  const [pipelineCount, setPipelineCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedPathway, setSelectedPathway] = useState(null);
@@ -87,7 +88,11 @@ export default function PathwaysPage() {
         // Read thresholds set by user on Consensus page (fall back to sensible defaults)
         const userFc = parseFloat(Storage.getItem('consensusFcThreshold') || '1.0');
         const userPval = parseFloat(Storage.getItem('consensusPvalThreshold') || '0.05');
-        const userMetric = Storage.getItem('consensusPvalMetric') || (mode === 'downstream' ? 'padj' : 'pvalue');
+        const userMetric = mode === 'downstream'
+          ? 'padj'
+          : (Storage.getItem('consensusPvalMetric') || 'pvalue');
+
+        setPipelineCount(pipelineData.pipelines.length);
 
         // Background universe = only genes measured in the experiment
         const experimentUniverse = pipelineData.geneNames;
@@ -99,8 +104,11 @@ export default function PathwaysPage() {
           const degs = pipe.results
             .filter(r => {
               if (!r) return false;
-              const mVal = userMetric === 'pvalue' ? (r.pvalue !== undefined ? r.pvalue : r.padj) : (r.padj !== undefined ? r.padj : r.pvalue);
-              return Math.abs(r.log2fc) >= userFc && mVal <= userPval;
+              // Use only the requested metric; never substitute a raw p-value
+              // for a missing adjusted p-value.
+              const mVal = userMetric === 'pvalue' ? r.pvalue : r.padj;
+              return Number.isFinite(mVal) && Number.isFinite(r.log2fc)
+                && Math.abs(r.log2fc) >= userFc && mVal <= userPval;
             })
             .map((r, i) => pipelineData.geneNames[r.gene_index !== undefined ? r.gene_index : i])
             .filter(Boolean);
@@ -174,7 +182,8 @@ export default function PathwaysPage() {
             Pathway-Level Consensus &amp; Biological Stability
           </h1>
           <p style={{ color: '#1e293b', fontSize: '1rem', marginTop: '0.5rem' }}>
-            Gene Ontology (GO) Biological Process enrichment consistency across all 6 analytical pipelines
+            Enrichment consistency across completed analytical methods ({pipelineCount || '—'}) using
+            g:Profiler sources GO:BP, KEGG, Reactome and HP
           </p>
         </div>
 
@@ -187,11 +196,18 @@ export default function PathwaysPage() {
         </button>
       </div>
 
+      {!loading && !fetchError && pipelineCount < 2 && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }}>
+          <strong>Single-method result.</strong> Only {pipelineCount || 0} method produced a saved table.
+          These pathways describe that method only; cross-method consensus requires DESeq2 and edgeR.
+        </div>
+      )}
+
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '16px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
           <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
           <h2 style={{ color: '#0284c7', marginBottom: '0.5rem' }}>Computing GO Pathway Consensus...</h2>
-          <p style={{ color: '#1e293b' }}>Fetching real-time annotations from EBI QuickGO & evaluating hypergeometric enrichment across pipelines</p>
+          <p style={{ color: '#1e293b' }}>Fetching real-time annotations from g:Profiler & evaluating enrichment across pipelines</p>
         </div>
       ) : fetchError ? (
         <div style={{ padding: '3rem', textAlign: 'center', background: 'rgba(254, 226, 226, 0.5)', borderRadius: '12px', border: '1px solid #fca5a5' }}>
@@ -204,27 +220,27 @@ export default function PathwaysPage() {
           {/* Summary Stat Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
             <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Total GO Terms Tested</div>
+              <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Pathway Terms Retained</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#0f172a' }}>{pathwayConsensus.length}</div>
-              <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '0.25rem' }}>Biological Process Terms</div>
+              <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '0.25rem' }}>Significant in at least one method</div>
             </div>
 
             <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
               <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Consensus Pathways (High)</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#059669' }}>{highCount}</div>
-              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>● Enriched in ≥5/6 Pipelines</div>
+              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>● Enriched in all {pipelineCount || 'completed'} methods</div>
             </div>
 
             <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
               <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Moderate Consensus</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#d97706' }}>{modCount}</div>
-              <div style={{ fontSize: '0.75rem', color: '#d97706', marginTop: '0.25rem' }}>● Enriched in 3–4/6 Pipelines</div>
+              <div style={{ fontSize: '0.75rem', color: '#d97706', marginTop: '0.25rem' }}>● Enriched in a majority of completed methods</div>
             </div>
 
             <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
               <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Method-Sensitive Pathways</div>
               <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#f97316' }}>{sensCount}</div>
-              <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem' }}>● Enriched in 1–2/6 Pipelines</div>
+              <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem' }}>● Enriched in at least one method</div>
             </div>
           </div>
 
@@ -331,7 +347,7 @@ export default function PathwaysPage() {
                   style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
                 >
                   <option value="ALL">All Categories</option>
-                  <option value="high_confidence">High Confidence (≥5/6)</option>
+                  <option value="high_confidence">High Confidence (all methods)</option>
                   <option value="moderate_confidence">Moderate (3–4/6)</option>
                   <option value="method_sensitive">Method-Sensitive (1–2/6)</option>
                 </select>
@@ -387,9 +403,9 @@ export default function PathwaysPage() {
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                             <div style={{ width: '60px', background: '#f1f5f9', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ width: `${(row.consensusScore / 6) * 100}%`, background: row.consensusScore >= 5 ? '#059669' : row.consensusScore >= 3 ? '#d97706' : '#f97316', height: '100%' }}></div>
+                              <div style={{ width: `${(row.consensusScore / Math.max(1, pipelineCount)) * 100}%`, background: row.consensusScore >= pipelineCount ? '#059669' : row.consensusScore >= Math.max(2, Math.ceil(pipelineCount * 0.6)) ? '#d97706' : '#f97316', height: '100%' }}></div>
                             </div>
-                            <span style={{ fontSize: '0.85rem', color: '#334155' }}>{row.consensusScore}/6</span>
+                            <span style={{ fontSize: '0.85rem', color: '#334155' }}>{row.consensusScore}/{pipelineCount}</span>
                           </div>
                         </td>
                         <td style={{ textAlign: 'center' }}>

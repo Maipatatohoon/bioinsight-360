@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import PCAScatter from '../../components/PCAScatter';
+import ExpressionHeatmap from '../../components/ExpressionHeatmap';
 import { computeLibrarySizes, computeDetectionRates, computeSampleCorrelation, detectOutliers } from '../../lib/qc';
 import { computePCA } from '../../lib/pca';
 import { motion } from 'framer-motion';
@@ -19,23 +20,7 @@ export default function QCPage() {
   const [jobProgress, setJobProgress] = useState(0);
   const [jobMessage, setJobMessage] = useState('Initializing...');
   const [jobError, setJobError] = useState(null);
-
-  const [cpmThreshold, setCpmThreshold] = useState(() => {
-    return parseFloat(Storage.getItem('cpmThreshold') || '1.0');
-  });
-  const [debouncedCpm, setDebouncedCpm] = useState(() => {
-    return parseFloat(Storage.getItem('cpmThreshold') || '1.0');
-  });
-
-  // Debounce: only re-run Worker 500ms after user stops dragging
-  // Note: Backend handles QC now, so CPM threshold here is just for display/future filtering
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setDebouncedCpm(cpmThreshold);
-      Storage.setItem('cpmThreshold', String(cpmThreshold));
-    }, 500);
-    return () => clearTimeout(t);
-  }, [cpmThreshold]);
+  const [methods, setMethods] = useState({});
 
   useEffect(() => {
     let isMounted = true;
@@ -58,19 +43,20 @@ export default function QCPage() {
         setJobState(status.state);
         setJobProgress(status.progress);
         setJobMessage(status.message);
+        setMethods(status.methods || {});
 
         if (status.qc_data) {
           setQcData(status.qc_data);
           setLoading(false);
         }
 
-        if (status.state === 'FAILED') {
+        if (status.state === 'FAILED' || status.state === 'CANCELLED') {
           console.error("Job failed:", status.error);
           setJobError(status.error || 'The analysis job failed.');
           clearInterval(pollInterval);
-        } else if (status.state === 'COMPLETED') {
+        } else if (['COMPLETED', 'PARTIALLY_COMPLETED'].includes(status.state)) {
           clearInterval(pollInterval);
-          // Completed but no QC payload: stop spinning and explain instead.
+          // Terminal but no QC payload: stop spinning and explain instead.
           if (!status.qc_data) {
             setJobError('The job finished but returned no QC data.');
           }
@@ -82,7 +68,10 @@ export default function QCPage() {
       }
     }
 
-    if (Storage.getItem('analysisMode') === 'downstream') {
+    // The legacy pre-computed DEG path has no backend job and belongs on the
+    // results page. A backend analysis job always has currentJobId, so keep
+    // polling QC even though the dashboard later marks the mode downstream.
+    if (Storage.getItem('analysisMode') === 'downstream' && !Storage.getItem('currentJobId')) {
       router.replace('/consensus');
     } else {
       pollJob();
@@ -140,15 +129,16 @@ export default function QCPage() {
     totalGenes
   } = qcData;
 
-  const formattedPCAData = {
-    pc1: pcaResult.components[0] || [],
-    pc2: pcaResult.components[1] || [],
+  const formattedPCAData = pcaResult ? {
+    pc1: pcaResult.components?.[0] || [],
+    pc2: pcaResult.components?.[1] || [],
     sampleNames: sampleNames,
     sampleGroups: sampleGroups,
-    varianceExplained: pcaResult.varianceExplained || [50, 30]
-  };
+    varianceExplained: pcaResult.varianceExplained || [0, 0]
+  } : null;
 
-  const isCompleted = jobState === 'COMPLETED';
+  const canViewResults = ['COMPLETED', 'PARTIALLY_COMPLETED'].includes(jobState)
+    || ['deseq2', 'edger'].some((engine) => methods?.[engine]?.status === 'completed');
 
   return (
     <motion.div 
@@ -171,20 +161,20 @@ export default function QCPage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
           <button 
-            onClick={() => isCompleted && router.push(`/consensus?jobId=${Storage.getItem('currentJobId')}`)}
-            className={isCompleted ? "btn-primary" : "btn-disabled"}
-            disabled={!isCompleted}
+            onClick={() => canViewResults && router.push(`/consensus?jobId=${Storage.getItem('currentJobId')}`)}
+            className={canViewResults ? "btn-primary" : "btn-disabled"}
+            disabled={!canViewResults}
             style={{ 
               display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', 
               fontSize: '1rem', fontWeight: 'bold',
-              background: isCompleted ? undefined : '#cbd5e1',
-              cursor: isCompleted ? 'pointer' : 'not-allowed',
-              opacity: isCompleted ? 1 : 0.7
+              background: canViewResults ? undefined : '#cbd5e1',
+              cursor: canViewResults ? 'pointer' : 'not-allowed',
+              opacity: canViewResults ? 1 : 0.7
             }}
           >
-            {isCompleted ? 'Proceed to Consensus Analysis →' : 'Analysis in Progress...'}
+            {canViewResults ? 'View Individual Results →' : 'Analysis in Progress...'}
           </button>
-          {!isCompleted && (
+          {!canViewResults && (
             <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid #64748b', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
               {jobMessage} ({jobProgress}%)
@@ -202,17 +192,14 @@ export default function QCPage() {
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <span style={{ fontWeight: 'bold', color: '#0f172a' }}>Low-Expression Filter (CPM Cutoff)</span>
-            <span style={{ fontWeight: 'bold', color: '#ec4899' }}>{cpmThreshold.toFixed(1)} CPM</span>
+            <span style={{ fontWeight: 'bold', color: '#ec4899' }}>1.0 CPM · backend QC</span>
           </div>
-          <input 
-            type="range" 
-            min="0" max="10" step="0.1" 
-            value={cpmThreshold} 
-            onChange={(e) => setCpmThreshold(parseFloat(e.target.value))}
-            style={{ width: '100%', accentColor: '#ec4899' }}
-          />
+          <div style={{ height: '6px', borderRadius: '999px', background: '#fce7f3', overflow: 'hidden', margin: '0.75rem 0' }}>
+            <div style={{ width: `${totalGenes ? (genesRetained / totalGenes) * 100 : 0}%`, height: '100%', background: '#ec4899' }} />
+          </div>
           <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>
-            Filtering out genes that do not meet {cpmThreshold} CPM in at least 2 samples.
+            QC uses genes with at least 1 CPM in at least 2 samples. This filter is applied once by the
+            backend before PCA, correlation and heatmap; changing a slider here would not re-run it.
           </div>
         </div>
         
@@ -234,7 +221,11 @@ export default function QCPage() {
           <div style={{ color: '#1e293b', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: '600' }}>Total Samples</div>
           <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#0f172a' }}>{sampleNames.length}</div>
           <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '0.25rem' }}>
-            {sampleGroups.filter(g => g.toLowerCase().includes('control')).length} Control / {sampleGroups.filter(g => !g.toLowerCase().includes('control')).length} Treated
+            {Object.entries(sampleGroups.reduce((counts, group) => {
+              const label = String(group || 'Unknown');
+              counts[label] = (counts[label] || 0) + 1;
+              return counts;
+            }, {})).map(([group, count]) => `${group}: ${count}`).join(' · ')}
           </div>
         </div>
 
@@ -264,6 +255,12 @@ export default function QCPage() {
           </div>
         </div>
       </motion.div>
+
+      {jobError && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b' }}>
+          <strong>Analysis issue:</strong> {jobError}
+        </div>
+      )}
 
       {/* QC Visualizations Grid */}
       <motion.div 
@@ -347,6 +344,18 @@ export default function QCPage() {
               style={{ width: '100%', height: '100%' }}
             />
           </div>
+        </div>
+
+        {/* Expression Heatmap */}
+        <div className="glass-card" style={{ padding: '1.5rem', gridColumn: '1 / -1' }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '0.5rem' }}>
+            Gene Expression Heatmap
+          </h3>
+          <p style={{ marginTop: 0, fontSize: '0.85rem', color: '#475569' }}>
+            Top variable genes from the common input matrix, transformed to log2 CPM and
+            row z-scores. This is a shared QC view, not a per-method DE result.
+          </p>
+          <ExpressionHeatmap heatmap={qcData.expressionHeatmap} />
         </div>
 
         {/* Sample Quality Status Table */}

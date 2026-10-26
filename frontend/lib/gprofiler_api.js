@@ -41,7 +41,13 @@ export async function runGProfilerEnrichment(degs, background, organism = 'hsapi
         pvalue: res.p_value,
         padj: res.p_value, // g:Profiler returns FDR-corrected p-value by default when threshold_method="fdr"
         overlap: res.intersection_size,
-        overlappingGenes: res.intersections ? res.intersections.map(i => degs[i]) : [],
+        // g:Profiler normally returns gene IDs in `intersections`; older
+        // examples sometimes used indices. Support both without inventing names.
+        overlappingGenes: Array.isArray(res.intersections)
+          ? res.intersections
+              .map((item) => (typeof item === 'number' ? degs[item] : item))
+              .filter((gene) => gene !== undefined && gene !== null && String(gene).trim() !== '')
+          : [],
         termGeneCount: res.term_size,
         expected: (degs.length * res.term_size) / background.length,
         enrichmentRatio: res.intersection_size / ((degs.length * res.term_size) / background.length)
@@ -49,6 +55,6 @@ export async function runGProfilerEnrichment(degs, background, organism = 'hsapi
     });
   } catch (error) {
     console.error("g:Profiler enrichment failed:", error);
-    return [];
+    throw error;
   }
 }

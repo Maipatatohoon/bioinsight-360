@@ -22,11 +22,15 @@ export async function loadDownstreamPipelines() {
         if (jobId) {
             const jobData = await getJobResults(jobId);
             const results = jobData.results || {};
-            return formatDownstreamPipelines(
+            const formatted = formatDownstreamPipelines(
                 results.deseq2 || [],
                 results.edger || [],
                 results.limma || []
             );
+            if (!formatted.pipelines.some((pipeline) => pipeline.results?.some(Boolean))) {
+                throw new Error('No completed method results are available for this job yet.');
+            }
+            return formatted;
         }
     }
 

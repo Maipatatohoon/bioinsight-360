@@ -21,7 +21,9 @@ frontend stays on **Vercel**.
 5. Open `https://bioinsight-360.vercel.app/?backend=<that URL>`, or paste the URL
    into the **Backend** control in the navbar. Keep the Colab tab open — closing
    it kills the tunnel.
-6. **Upload → Load Demo Data → Continue → QC → Consensus → Pathways → Export.**
+6. **Upload → Load Demo Data → Continue → QC → Results → (optional) Comparison → Pathways → Export.**
+   DESeq2 and edgeR each appear as soon as that method finishes; the comparison is a
+   separate, user-triggered calculation over the saved tables.
 
 > Free Colab gives about 12 GB RAM and 2 vCPU, which is enough for the 42k-gene
 > demo and for typical course datasets. The tunnel URL changes every session, so
@@ -46,8 +48,10 @@ error is Colab's browser↔runtime connection, not this notebook:
 - **Sanity check:** a brand-new notebook running `print("hi")` fails the same
   way → the problem is the network/browser, not BioInsight.
 
-The notebook automatically applies a backend hotfix so real datasets containing
-`NA`/`Inf` statistics return `null` instead of failing with a 500.
+The notebook automatically applies a **method-first backend compatibility overlay**.
+It adds per-method status/result endpoints, partial-result handling, and the saved optional
+comparison even if the backend repository still points at the older all-or-nothing API.
+`NA`/`Inf` statistics are serialized as `null` rather than failing with a 500.
 
 ---
 
@@ -59,19 +63,29 @@ The notebook automatically applies a backend hotfix so real datasets containing
 
 2. **Job-Oriented Asynchronous Architecture:**
    - Decoupled Next.js React frontend (hosted on Vercel) and Python FastAPI computation worker (hosted on Docker / Cloud Provider).
-   - Asynchronous job queue (`QUEUED`, `VALIDATING`, `ANALYZING`, `GENERATING_RESULTS`, `COMPLETED`, `FAILED`) prevents HTTP request timeouts.
+   - Asynchronous job queue (`QUEUED`, `VALIDATING`, `RUNNING`, `COMPLETED`,
+     `PARTIALLY_COMPLETED`, `FAILED`, `CANCELLED`) prevents HTTP request timeouts and keeps
+     one completed method readable while the other is still running.
 
-3. **Multi-Tool Consensus & Robustness Auditing:**
-   - Runs `DESeq2`, `edgeR`, and `limma-voom` side-by-side.
-   - Computes pairwise Jaccard similarity indices, UpSet set intersections, and identifies robust consensus DEGs.
+3. **Method-First Results, Optional Comparison:**
+   - Shows DESeq2 and edgeR results independently as soon as each finishes (partial
+     results are expected, not an error).
+   - The optional DESeq2-vs-edgeR comparison is computed from the saved tables only,
+     persists on the job, and requires significance in both methods at adjusted
+     p-value / fold-change thresholds **and** the same direction.
+   - limma-voom remains available as an optional third view and never blocks the
+     two core results.
 
 4. **Dual-Mode Data Workflow:**
    - **Mode A (Raw Count Execution):** Accepts raw un-normalized count matrices, runs `AnalysisUnit` dataset profiling, validates biological replicates ($n \ge 2$), and computes DE via R microservice.
    - **Mode B (Pre-Calculated DEG Interpretation):** Accepts user-uploaded DEG result tables (DESeq2/edgeR/limma CSVs) for instant client-side Volcano, Heatmap, and GO enrichment visualization.
 
 5. **Scientific Result Dashboard:**
-   - Interactive Volcano plots, MA plots, PCA scatter plots, Sample Correlation Heatmaps, and GO enrichment charts built with Plotly.js.
-   - Downloadable publication-ready CSV result tables and high-resolution figures.
+   - Per-method volcano plots, result tables, PCA, sample correlation and a top-variable-gene
+     expression heatmap, plus optional functional enrichment.
+   - Downloadable method/comparison CSV tables and a PDF report. Missing adjusted p-values
+     are never replaced by raw p-values, and a failed method is reported without hiding
+     the method that succeeded.
 
 ---
 
@@ -96,6 +110,8 @@ The notebook automatically applies a backend hotfix so real datasets containing
                │  - POST /api/analysis (Job Submission)   │
                │  - GET /api/analysis/{job_id} (Status)   │
                │  - GET /api/analysis/{job_id}/results    │
+               │  - GET /api/analysis/{id}/method/{engine}│
+               │  - POST/GET /api/analysis/{id}/comparison│
                └────────────────────┬─────────────────────┘
                                     │
                        Rscript File Handoff (CSVs)
@@ -161,16 +177,19 @@ uvicorn app.main:app --reload --port 8000
 ### 3. Running Tests
 ```bash
 cd backend
-.venv/bin/python3 tests/test_backend.py
+.venv/bin/python -m pytest -q
+# 61 tests, including partial results, validation, per-method failures, comparison, and worker fallback
 ```
 
 ---
 
 ## 🧪 Scientific Validation & Safety Safeguards
 
-- **Integer Count Enforcement:** Raw count matrices containing floating-point values or normalized TPM/FPKM values are flagged and rounded with a warning before DESeq2/edgeR execution.
-- **Biological Replicate Safeguard:** At least 2 biological replicates per group are strictly required to estimate dispersion.
-- **Independent Method Reporting:** DESeq2, edgeR, and limma-voom outputs are stored and displayed independently. Consensus metrics calculate intersection overlap without altering single-method values.
+- **Integer Count Enforcement:** The validator rejects non-integer, negative, TPM/FPKM-like or otherwise unsupported matrices instead of silently rounding them into raw counts.
+- **Sample and Group Validation:** Duplicate sample IDs, missing selected samples, and groups with fewer than two biological replicates are rejected with a specific error.
+- **Independent Method Reporting:** DESeq2, edgeR, and limma-voom outputs are stored and displayed independently. A failed method never removes another method's saved table.
+- **Adjusted-P-Value Discipline:** Significance uses Benjamini-Hochberg adjusted p-values only; raw p-values are shown for transparency but never substituted when `padj` is missing.
+- **Comparison Integrity:** The optional comparison reads saved tables, does not re-run R, and labels method-specific or direction-conflicting genes instead of forcing them into consensus.
 
 ---
 
