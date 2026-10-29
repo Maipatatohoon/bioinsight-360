@@ -10,7 +10,7 @@ import {
   clearBackendUrl,
   checkBackendHealth,
 } from '../lib/backend_api';
-import { parseBackendFromSearch, stripBackendFromSearch } from '../lib/backendUrl.mjs';
+import { parseBackendFromSearch, stripBackendFromSearch, normalizeBackendInput, describeBackendError } from '../lib/backendUrl.mjs';
 
 export default function BackendSettings({ light = false }) {
   const [open, setOpen] = useState(false);
@@ -50,16 +50,32 @@ export default function BackendSettings({ light = false }) {
       setMessage('Connected');
     } else {
       setStatus('error');
-      setMessage(res.message || 'Unreachable');
+      setMessage(describeBackendError(res.httpStatus, res.message));
     }
   }
 
   async function saveAndTest() {
-    setBackendUrl(url);
-    const current = getBackendUrl();
-    setUrl(current);
-    setActive(current);
-    await probe();
+    const candidate = normalizeBackendInput(url);
+    if (!candidate) {
+      setStatus('error');
+      setMessage('That is not a valid URL. Paste the full address, for example https://xxxx.trycloudflare.com');
+      return;
+    }
+    setUrl(candidate);
+    setStatus('checking');
+    setMessage('Checking…');
+    const res = await checkBackendHealth(candidate);
+    if (res.status === 'connected') {
+      // Only a backend that actually answers /health is stored, so a dead
+      // tunnel can never become the active address by accident.
+      setBackendUrl(candidate);
+      setActive(candidate);
+      setStatus('connected');
+      setMessage('Connected and saved');
+    } else {
+      setStatus('error');
+      setMessage(describeBackendError(res.httpStatus, res.message));
+    }
   }
 
   async function reset() {
@@ -133,10 +149,16 @@ export default function BackendSettings({ light = false }) {
             </button>
             <button onClick={reset} style={btn}>Reset</button>
           </div>
-          <div style={{ marginTop: 8, fontSize: '0.78rem', color }}>
+          <div style={{ marginTop: 8, fontSize: '0.78rem', color, lineHeight: 1.45, wordBreak: 'break-word' }}>
             {message}
             {active ? <span style={{ color: '#94a3b8' }}> · {active}</span> : null}
           </div>
+          {status === 'error' && (
+            <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#64748b', lineHeight: 1.45 }}>
+              Each Colab restart gives a new URL. Run STEP 10 (backend), then STEP 11 (URL),
+              then STEP 12 (worker), and use the newest address only.
+            </p>
+          )}
         </div>
       )}
     </div>

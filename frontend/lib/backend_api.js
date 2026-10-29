@@ -25,19 +25,29 @@ export const clearBackendUrl = () => {
 /** The build-time default, for display in the settings UI. */
 export const getDefaultBackendUrl = () => resolveBackendUrl(null, DEFAULT_BACKEND_URL);
 
-export const checkBackendHealth = async () => {
-    const baseUrl = getBackendUrl();
+export const checkBackendHealth = async (urlOverride) => {
+    const baseUrl = resolveBackendUrl(urlOverride ?? readStoredBackendUrl(), DEFAULT_BACKEND_URL);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
     try {
         const response = await fetch(`${baseUrl}/health`, {
-            method: 'GET'
+            method: 'GET',
+            signal: controller ? controller.signal : undefined,
         });
         if (response.ok) {
             const data = await response.json();
             return { status: 'connected', data, url: baseUrl };
         }
-        return { status: 'error', message: `HTTP ${response.status}`, url: baseUrl };
+        return { status: 'error', message: `HTTP ${response.status}`, httpStatus: response.status, url: baseUrl };
     } catch (err) {
-        return { status: 'error', message: err.message, url: baseUrl };
+        const aborted = err && err.name === 'AbortError';
+        return {
+            status: 'error',
+            message: aborted ? 'Timed out after 12s' : err.message,
+            url: baseUrl,
+        };
+    } finally {
+        if (timer) clearTimeout(timer);
     }
 };
 

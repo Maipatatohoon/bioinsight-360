@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveBackendUrl, parseBackendFromSearch, stripBackendFromSearch } from './backendUrl.mjs';
+import {
+  resolveBackendUrl,
+  parseBackendFromSearch,
+  stripBackendFromSearch,
+  normalizeBackendInput,
+  describeBackendError,
+} from './backendUrl.mjs';
 
 test('falls back to the build-time URL when nothing is stored', () => {
   assert.equal(resolveBackendUrl(null, 'http://localhost:8000'), 'http://localhost:8000');
@@ -43,4 +49,21 @@ test('strips only the backend parameter from a query string', () => {
   assert.equal(stripBackendFromSearch('?mode=qc&backend=https://x.example'), '?mode=qc');
   assert.equal(stripBackendFromSearch('?backend=https://x.example'), '');
   assert.equal(stripBackendFromSearch(''), '');
+});
+
+test('normalises what a user pastes into the backend dialog', () => {
+  assert.equal(normalizeBackendInput('abc.trycloudflare.com'), 'https://abc.trycloudflare.com');
+  assert.equal(normalizeBackendInput('  https://abc.trycloudflare.com/  '), 'https://abc.trycloudflare.com');
+  assert.equal(normalizeBackendInput('http://localhost:8000'), 'http://localhost:8000');
+  assert.equal(normalizeBackendInput(''), '');
+  assert.equal(normalizeBackendInput('not a url'), null);
+});
+
+test('explains a dead tunnel instead of showing a bare status code', () => {
+  const dead = describeBackendError(502, 'HTTP 502');
+  assert.match(dead, /not running/i);
+  assert.match(dead, /STEP 10/);
+  assert.match(describeBackendError(530), /tunnel/i);
+  assert.match(describeBackendError(404, 'HTTP 404'), /\/health/);
+  assert.match(describeBackendError(0, 'Failed to fetch'), /Colab runtime/i);
 });
