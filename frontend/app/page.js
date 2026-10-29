@@ -25,15 +25,15 @@ export default function Home() {
           <div style={{ display: 'flex', gap: '2.25rem', marginTop: '2rem' }}>
             <div>
               <div style={{ fontSize: 'var(--fs-xl)', fontWeight: 800, color: 'var(--text-primary)' }}>3</div>
-              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>R engines</div>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>DE engines</div>
             </div>
             <div>
-              <div style={{ fontSize: 'var(--fs-xl)', fontWeight: 800, color: 'var(--text-primary)' }}>6</div>
-              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>Pipelines</div>
+              <div style={{ fontSize: 'var(--fs-xl)', fontWeight: 800, color: 'var(--text-primary)' }}>1</div>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>Integrated workflow</div>
             </div>
             <div>
-              <div style={{ fontSize: 'var(--fs-xl)', fontWeight: 800, color: 'var(--text-primary)' }}>100%</div>
-              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>Private / in-browser</div>
+              <div style={{ fontSize: 'var(--fs-xl)', fontWeight: 800, color: 'var(--text-primary)' }}>0</div>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>Installs required</div>
             </div>
           </div>
         </div>
@@ -53,9 +53,9 @@ export default function Home() {
             <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 800 }}>
               1
             </div>
-            <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>📥 Upload File</h3>
+            <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>📥 Upload Counts</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              Drag &amp; drop your DESeq2, edgeR, or Excel CSV result table. Our smart profiler checks it for formatting errors instantly.
+              Drop a raw count matrix (CSV, TSV, or GEO series matrix) with optional metadata. Inputs are validated before any analysis starts.
             </p>
           </div>
 

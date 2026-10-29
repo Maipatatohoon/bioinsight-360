@@ -1274,7 +1274,7 @@ export default function UploadPage() {
                                 <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#8b5cf6' }}>{degSummary.genes}</div>
                             </div>
                             <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 500 }}>Pipelines Loaded</div>
+                                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 500 }}>Methods Loaded</div>
                                 <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#8b5cf6' }}>{degSummary.tools} (DESeq2, edgeR, limma)</div>
                             </div>
                         </div>

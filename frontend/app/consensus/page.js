@@ -336,8 +336,8 @@ function LegacyConsensusPage() {
       ) : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem', background: 'rgba(226, 232, 240, 0.4)', borderRadius: '16px' }}>
           <div className="pulse" style={{ fontSize: '3rem', marginBottom: '1rem' }}></div>
-          <h2 style={{ color: '#e11d48', marginBottom: '0.5rem' }}>{analysisMode === 'downstream' ? 'Merging Pipeline Results...' : 'Running 6 Statistical Pipelines...'}</h2>
-          <p style={{ color: '#1e293b' }}>{analysisMode === 'downstream' ? "Computing consensus across DESeq2, edgeR, and limma" : "Computing CPM, Upper Quartile, Size Factors, Welch's t-test, Mann-Whitney U, and Fleiss' Kappa"}</p>
+          <h2 style={{ color: '#e11d48', marginBottom: '0.5rem' }}>{analysisMode === 'downstream' ? 'Merging Pipeline Results...' : 'Comparing DESeq2, edgeR and limma...'}</h2>
+          <p style={{ color: '#1e293b' }}>{analysisMode === 'downstream' ? "Computing consensus across DESeq2, edgeR, and limma" : "Each method is run by the R backend; completed tables appear as soon as they are available"}</p>
         </div>
       ) : (
         <>
