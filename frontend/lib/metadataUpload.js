@@ -347,6 +347,62 @@ export function suggestGroupsFromSampleNames(samples = []) {
   };
 }
 
+/**
+ * Fallback for metadata whose sample column uses different identifiers from the
+ * count matrix (for example GEO GSM accessions vs local sample names). This is
+ * only valid when both files describe the same samples in the same order, so it
+ * is never automatic: the caller must show both lists and get a confirmation.
+ */
+export function applyMetadataByPosition(assignments = [], rows = []) {
+  const headers = Object.keys(rows[0] || {});
+  const columns = detectMetadataColumns(headers);
+
+  if (!columns.groupHeader) {
+    return {
+      ok: false,
+      error: 'The metadata file has no group column.',
+      assignments: assignments.map((row) => ({ ...row })),
+      matched: 0,
+      groups: [],
+      groupCounts: {},
+      columns,
+    };
+  }
+  if (rows.length !== assignments.length) {
+    return {
+      ok: false,
+      error:
+        `Cannot match by position: the metadata has ${rows.length} row(s) but the ` +
+        `count matrix has ${assignments.length} sample(s). They must be the same length.`,
+      assignments: assignments.map((row) => ({ ...row })),
+      matched: 0,
+      groups: [],
+      groupCounts: {},
+      columns,
+    };
+  }
+
+  const groupCounts = {};
+  const updated = assignments.map((row, index) => {
+    const sample = cleanValue(row.Sample || row.sample || row.ID || row.id || row.Name || row.name);
+    const group = cleanValue(rows[index][columns.groupHeader]) || 'Unassigned';
+    groupCounts[group] = (groupCounts[group] || 0) + 1;
+    return { Sample: sample, Group: group };
+  });
+
+  const groups = Object.keys(groupCounts).filter((group) => !NON_GROUP_RE.test(cleanValue(group)));
+  return {
+    ok: groups.length > 0,
+    error: groups.length ? null : 'No usable group values were found in the metadata column.',
+    assignments: updated,
+    matched: updated.length,
+    groups,
+    groupCounts,
+    columns,
+    byPosition: true,
+  };
+}
+
 /** Generate a metadata sheet for the current count matrix. */
 export function buildMetadataTemplate(assignments = []) {
   const esc = (value) => {

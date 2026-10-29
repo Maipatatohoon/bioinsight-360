@@ -9,12 +9,43 @@ import { motion } from 'framer-motion';
 import { submitAnalysisJob, getBackendUrl } from '../../lib/backend_api';
 import {
     applyMetadataRows,
+    applyMetadataByPosition,
     buildMetadataTemplate,
     chooseComparisonGroups,
     detectMetadataColumns,
     isGeoSoftFile,
     suggestGroupsFromSampleNames,
 } from '../../lib/metadataUpload';
+import { parseGeoMetadata } from '../../lib/geoMetadata';
+
+/**
+ * Read an uploaded file as text, transparently decompressing gzip. GEO
+ * metadata is almost always distributed as `.gz`, so rejecting compressed
+ * metadata would exclude the most common real-world case.
+ */
+async function readFileText(file) {
+    const name = (file.name || '').toLowerCase();
+    if (!name.endsWith('.gz')) return file.text();
+
+    if (typeof DecompressionStream === 'undefined') {
+        throw new Error(
+            'This browser cannot decompress .gz files. Unzip the file and upload the plain text instead.'
+        );
+    }
+    const reader = file
+        .stream()
+        .pipeThrough(new DecompressionStream('gzip'))
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
+
+    let text = '';
+    for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += value;
+    }
+    return text;
+}
 
 export function processCountMatrix(rawText) {
     if (!rawText || !rawText.trim()) {
@@ -243,42 +274,90 @@ export default function UploadPage() {
         setPendingMetadata(null);
     }, [pendingMetadata, metaAssignments]);
 
+    const importMetadataRows = (rows, fileName, sourceLabel) => {
+        const columns = detectMetadataColumns(Object.keys(rows[0] || {}));
+        if (!columns.sampleHeader || !columns.groupHeader) {
+            const message =
+                'The metadata file needs a sample column and a group/condition column. ' +
+                'A plain CSV with Sample and Group is the simplest option.';
+            setMetadataReport({ ok: false, error: message, fileName });
+            alert(message);
+            return;
+        }
+
+        // Metadata can be supplied before counts. Hold it until the count
+        // sample columns exist, then the effect above applies it.
+        if (metaAssignments.length === 0) {
+            setPendingMetadata({ fileName, rows, columns, sourceLabel });
+            setMetadataReport(null);
+            return;
+        }
+
+        let result = applyMetadataRows(metaAssignments, rows);
+
+        // Identifiers can differ while describing the same samples (GEO GSM
+        // accessions vs local column names). Offer an explicit, confirmed
+        // positional match instead of dead-ending the user.
+        if (!result.ok && !result.matched && rows.length === metaAssignments.length) {
+            const countPreview = metaAssignments
+                .slice(0, 5)
+                .map((row) => row.Sample)
+                .join(', ');
+            const metaPreview = rows
+                .slice(0, 5)
+                .map((row) => row[result.columns.sampleHeader])
+                .join(', ');
+            const proceed = window.confirm(
+                `No sample IDs matched, but both files contain ${rows.length} samples.\n\n` +
+                `Count matrix columns: ${countPreview}${metaAssignments.length > 5 ? ', …' : ''}\n` +
+                `Metadata sample IDs: ${metaPreview}${rows.length > 5 ? ', …' : ''}\n\n` +
+                'If the rows are in the same order as the count columns, match them by position.\n' +
+                'Only choose OK if you have checked that order; a wrong order swaps control and treatment.'
+            );
+            if (proceed) result = applyMetadataByPosition(metaAssignments, rows);
+        }
+
+        const applied = commitMetadataResult(result, fileName);
+        if (!applied) {
+            const detected = result.columns
+                ? `Sample column: ${result.columns.sampleHeader || 'none'} · group column: ${result.columns.groupHeader || 'none'}`
+                : '';
+            alert(
+                `${result.error}\n\n${detected}\n\n` +
+                'Your count matrix columns and the metadata sample IDs must refer to the same samples. ' +
+                'You can also assign groups directly in the table below — metadata is optional.'
+            );
+        }
+    };
+
     const handleMetadataFile = async (file) => {
         if (!file) return;
         try {
-            const lowerName = file.name.toLowerCase();
-            const geoMessage =
-                'This is not a metadata table. A GEO SOFT/family file (for example GSE155489_family.soft.gz) ' +
-                'is the full GEO record, not a two-column sample sheet.\n\n' +
-                'Upload a plain CSV/TSV with a sample column and a group column, for example:\n' +
-                'Sample,Group\nS1,Control\nS2,PCOS';
+            const text = await readFileText(file);
 
-            if (lowerName.endsWith('.soft') || lowerName.endsWith('.soft.gz')) {
-                setMetadataReport({ ok: false, error: geoMessage, fileName: file.name });
-                setPendingMetadata(null);
-                alert(geoMessage);
-                return;
-            }
-
-            if (lowerName.endsWith('.gz')) {
-                const message =
-                    'Compressed metadata is not supported. Unzip the file and upload the CSV/TSV itself.';
-                setMetadataReport({ ok: false, error: message, fileName: file.name });
-                setPendingMetadata(null);
-                alert(message);
-                return;
-            }
-
-            const text = await file.text();
-
+            // GEO series matrix and SOFT family files are full records, but they
+            // do contain per-sample titles and characteristics, which is exactly
+            // the sample/group information needed here.
             if (isGeoSoftFile(file.name, text)) {
-                setMetadataReport({ ok: false, error: geoMessage, fileName: file.name });
-                setPendingMetadata(null);
-                alert(geoMessage);
+                const geo = parseGeoMetadata(text);
+                if (!geo.ok || !geo.rows.length) {
+                    throw new Error(geo.error || 'Could not read samples from this GEO file.');
+                }
+                if (geo.groups.length < 2) {
+                    const message =
+                        `Read ${geo.rows.length} sample(s) from this GEO file, but could not find two ` +
+                        'experimental groups in its titles or characteristics.\n\n' +
+                        'Assign groups manually in the table below, or upload a CSV with Sample and Group columns.';
+                    setMetadataReport({ ok: false, error: message, fileName: file.name });
+                    alert(message);
+                    return;
+                }
+                const label = geo.source === 'soft' ? 'GEO SOFT' : 'GEO series matrix';
+                importMetadataRows(geo.rows, file.name, label);
                 return;
             }
 
-            const firstLine = text.substring(0, text.indexOf('\n'));
+            const firstLine = text.substring(0, Math.max(0, text.indexOf('\n')));
             let delimiter = ',';
             if (firstLine.includes('\t')) delimiter = '\t';
             else if (firstLine.includes(';') && !firstLine.includes(',')) delimiter = ';';
@@ -288,37 +367,7 @@ export default function UploadPage() {
                 throw new Error('The metadata file has no data rows.');
             }
 
-            const columns = detectMetadataColumns(Object.keys(parsed.data[0] || {}));
-            if (!columns.sampleHeader || !columns.groupHeader) {
-                const message = 'The metadata file needs a sample column and a group/condition column.';
-                setMetadataReport({ ok: false, error: message, fileName: file.name });
-                alert(message);
-                return;
-            }
-
-            // Metadata can be supplied before counts. Hold it until the count
-            // sample columns exist, then the effect above applies it.
-            if (metaAssignments.length === 0) {
-                setPendingMetadata({
-                    fileName: file.name,
-                    rows: parsed.data,
-                    columns,
-                });
-                setMetadataReport(null);
-                return;
-            }
-
-            const result = applyMetadataRows(metaAssignments, parsed.data);
-            const applied = commitMetadataResult(result, file.name);
-
-            if (!applied) {
-                alert(
-                    `${result.error}\n\n` +
-                    `Detected sample column: ${result.columns?.sampleHeader || 'none'}\n` +
-                    `Detected group column: ${result.columns?.groupHeader || 'none'}\n\n` +
-                    'Check that the sample IDs match the count-matrix column names, then try again.'
-                );
-            }
+            importMetadataRows(parsed.data, file.name, 'metadata');
         } catch (error) {
             console.error('Metadata import failed:', error);
             setMetadataReport({ ok: false, error: error.message, fileName: file.name });
@@ -670,10 +719,12 @@ export default function UploadPage() {
 
                         <div style={{ marginTop: '2rem', padding: '1.25rem 1.5rem', background: '#faf5ff', border: '2px dashed #c4b5fd', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                             <div style={{ maxWidth: '680px' }}>
-                                <h3 style={{ margin: 0, color: '#5b21b6', fontSize: '1.05rem' }}>2. Sample metadata (recommended)</h3>
+                                <h3 style={{ margin: 0, color: '#5b21b6', fontSize: '1.05rem' }}>2. Sample metadata (optional)</h3>
                                 <p style={{ margin: '0.35rem 0 0 0', color: '#6d28d9', fontSize: '0.88rem', lineHeight: 1.5 }}>
-                                    Upload a <strong>plain CSV/TSV</strong> with <strong>Sample</strong> and <strong>Group</strong> columns — not a GEO SOFT/family file.
-                                    A count matrix is always required to run an analysis; metadata only tells the app which samples are control and treatment.
+                                    Upload a <strong>CSV/TSV</strong> with Sample and Group columns, or a GEO
+                                    <strong> series matrix</strong> / <strong>SOFT family</strong> file — groups are read
+                                    from its sample titles and characteristics. A count matrix is always required;
+                                    metadata only tells the app which samples are control and treatment.
                                 </p>
                                 {pendingMetadata ? (
                                     <div style={{ marginTop: '0.5rem', color: '#047857', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -695,10 +746,10 @@ export default function UploadPage() {
                                 )}
                             </div>
                             <label style={{ padding: '0.65rem 1.1rem', background: '#7c3aed', color: '#fff', border: '1px solid #6d28d9', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                Upload Metadata CSV
+                                Upload Metadata
                                 <input
                                     type="file"
-                                    accept=".csv,.tsv,.txt"
+                                    accept=".csv,.tsv,.txt,.gz,.soft"
                                     style={{ display: 'none' }}
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
@@ -877,7 +928,20 @@ export default function UploadPage() {
                         {metaAssignments.filter((row) => /^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length > 0 && (
                             <div style={{ marginBottom: '1.5rem', padding: '0.9rem 1rem', borderRadius: '10px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.9rem' }}>
                                 <strong>{metaAssignments.filter((row) => /^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length} sample(s) are Unassigned/Exclude.</strong>{' '}
-                                Only samples in the selected control and treatment groups are submitted. Excluded samples are expected when your metadata covers a subset of the count matrix; each selected group needs at least 2 replicates.
+                                {metaAssignments.filter((row) => !/^(unassigned|exclude)$/i.test(String(row.Group || row.group || ''))).length === 0 ? (
+                                    <>
+                                        The analysis cannot start until at least two samples are control and two are treatment.
+                                        Assign each sample in the table below, or upload metadata with Sample and Group columns.
+                                        <button
+                                            onClick={() => document.getElementById('group-assignment')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                            style={{ marginLeft: '0.6rem', padding: '0.2rem 0.6rem', background: '#fff', color: '#92400e', border: '1px solid #fcd34d', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}
+                                        >
+                                            Assign groups below
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>Only samples in the selected control and treatment groups are submitted. Excluded samples are expected when your metadata covers a subset of the count matrix; each selected group needs at least 2 replicates.</>
+                                )}
                             </div>
                         )}
 
@@ -885,15 +949,15 @@ export default function UploadPage() {
                             <div>
                                 <h4 style={{ margin: 0, color: '#334155' }}>Metadata Assignment</h4>
                                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                                    Recommended: upload a CSV with <strong>Sample</strong> and <strong>Group</strong> columns. Groups fill automatically for any dataset. Use name keywords only when you do not have metadata.
+                                    Upload a CSV/TSV with <strong>Sample</strong> and <strong>Group</strong> columns, or a GEO series matrix / SOFT file. Otherwise assign each sample below — metadata is optional.
                                 </p>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                 <label style={{ padding: '0.5rem 1rem', background: '#0284c7', color: '#fff', border: '1px solid #0369a1', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                                    Upload Metadata CSV
+                                    Upload Metadata
                                     <input
                                         type="file"
-                                        accept=".csv,.tsv,.txt"
+                                        accept=".csv,.tsv,.txt,.gz,.soft"
                                         style={{ display: 'none' }}
                                         onChange={(e) => {
                                             const file = e.target.files?.[0];
@@ -1045,7 +1109,7 @@ export default function UploadPage() {
                                 )}
                             </div>
                         )}
-                        <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
+                        <div id="group-assignment" style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
                             {metaAssignments.map((m, idx) => {
                                 const sampleName = m.Sample || m.sample || m.ID || m.id || m.Name || m.name || `Sample_${idx}`;
                                 const currentGroup = m.Group || m.group || 'Unassigned';

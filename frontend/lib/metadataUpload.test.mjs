@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyMetadataRows,
+  applyMetadataByPosition,
   buildMetadataTemplate,
   chooseComparisonGroups,
   detectMetadataColumns,
@@ -195,4 +196,27 @@ test('rejects GEO SOFT/family files as metadata tables', () => {
     isGeoSoftFile('metadata.csv', 'Sample,Group\nS1,Control\nS2,PCOS\n'),
     false,
   );
+});
+
+test('matches metadata by position only when the row counts agree', () => {
+  const rows = [
+    { Sample: 'GSM1', Group: 'Control' },
+    { Sample: 'GSM2', Group: 'Control' },
+    { Sample: 'GSM3', Group: 'PCOS' },
+    { Sample: 'GSM4', Group: 'PCOS' },
+  ];
+  const counts = assignments(['GC_B7', 'GC_B8', 'GC_B15', 'GC_B16']);
+  const result = applyMetadataByPosition(counts, rows);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.assignments, [
+    { Sample: 'GC_B7', Group: 'Control' },
+    { Sample: 'GC_B8', Group: 'Control' },
+    { Sample: 'GC_B15', Group: 'PCOS' },
+    { Sample: 'GC_B16', Group: 'PCOS' },
+  ]);
+  assert.deepEqual(result.groupCounts, { Control: 2, PCOS: 2 });
+
+  const mismatch = applyMetadataByPosition(counts, rows.slice(0, 3));
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.error, /same length/i);
 });
