@@ -7,6 +7,7 @@ import {
   detectMetadataColumns,
   metadataSampleKey,
   suggestGroupsFromSampleNames,
+  isGeoSoftFile,
 } from './metadataUpload.js';
 
 const assignments = (samples) => samples.map((Sample) => ({ Sample, Group: 'Unassigned' }));
@@ -181,4 +182,17 @@ test('does not invent groups for accession-only sample names', () => {
 
   assert.equal(result.ok, false);
   assert.match(result.error, /No repeated group labels/);
+});
+
+test('rejects GEO SOFT/family files as metadata tables', () => {
+  assert.equal(isGeoSoftFile('GSE155489_family.soft.gz'), true);
+  assert.equal(isGeoSoftFile('GSE155489_family.soft'), true);
+  assert.equal(
+    isGeoSoftFile('metadata.csv', '^SERIES = GSE155489\n!Series_title = PCOS\n'),
+    true,
+  );
+  assert.equal(
+    isGeoSoftFile('metadata.csv', 'Sample,Group\nS1,Control\nS2,PCOS\n'),
+    false,
+  );
 });

@@ -12,6 +12,7 @@ import {
     buildMetadataTemplate,
     chooseComparisonGroups,
     detectMetadataColumns,
+    isGeoSoftFile,
     suggestGroupsFromSampleNames,
 } from '../../lib/metadataUpload';
 
@@ -245,7 +246,38 @@ export default function UploadPage() {
     const handleMetadataFile = async (file) => {
         if (!file) return;
         try {
+            const lowerName = file.name.toLowerCase();
+            const geoMessage =
+                'This is not a metadata table. A GEO SOFT/family file (for example GSE155489_family.soft.gz) ' +
+                'is the full GEO record, not a two-column sample sheet.\n\n' +
+                'Upload a plain CSV/TSV with a sample column and a group column, for example:\n' +
+                'Sample,Group\nS1,Control\nS2,PCOS';
+
+            if (lowerName.endsWith('.soft') || lowerName.endsWith('.soft.gz')) {
+                setMetadataReport({ ok: false, error: geoMessage, fileName: file.name });
+                setPendingMetadata(null);
+                alert(geoMessage);
+                return;
+            }
+
+            if (lowerName.endsWith('.gz')) {
+                const message =
+                    'Compressed metadata is not supported. Unzip the file and upload the CSV/TSV itself.';
+                setMetadataReport({ ok: false, error: message, fileName: file.name });
+                setPendingMetadata(null);
+                alert(message);
+                return;
+            }
+
             const text = await file.text();
+
+            if (isGeoSoftFile(file.name, text)) {
+                setMetadataReport({ ok: false, error: geoMessage, fileName: file.name });
+                setPendingMetadata(null);
+                alert(geoMessage);
+                return;
+            }
+
             const firstLine = text.substring(0, text.indexOf('\n'));
             let delimiter = ',';
             if (firstLine.includes('\t')) delimiter = '\t';
@@ -640,12 +672,13 @@ export default function UploadPage() {
                             <div style={{ maxWidth: '680px' }}>
                                 <h3 style={{ margin: 0, color: '#5b21b6', fontSize: '1.05rem' }}>2. Sample metadata (recommended)</h3>
                                 <p style={{ margin: '0.35rem 0 0 0', color: '#6d28d9', fontSize: '0.88rem', lineHeight: 1.5 }}>
-                                    Upload a CSV with <strong>Sample</strong> and <strong>Group</strong> columns. You can upload it before or after the count matrix; groups apply automatically.
+                                    Upload a <strong>plain CSV/TSV</strong> with <strong>Sample</strong> and <strong>Group</strong> columns — not a GEO SOFT/family file.
+                                    A count matrix is always required to run an analysis; metadata only tells the app which samples are control and treatment.
                                 </p>
                                 {pendingMetadata ? (
                                     <div style={{ marginTop: '0.5rem', color: '#047857', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <strong>✓ {pendingMetadata.fileName} loaded.</strong>
-                                        <span>Upload the count matrix next.</span>
+                                        <strong>✓ {pendingMetadata.fileName} selected.</strong>
+                                        <span>It will be matched when you upload the count matrix.</span>
                                         <button onClick={() => setPendingMetadata(null)} style={{ padding: '0.15rem 0.5rem', background: '#fff', color: '#6d28d9', border: '1px solid #c4b5fd', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem' }}>
                                             Remove
                                         </button>

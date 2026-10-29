@@ -75,6 +75,16 @@ function headerKey(value) {
     .replace(/^_+|_+$/g, '');
 }
 
+/**
+ * Detect GEO SOFT/family files, which are full GEO records rather than the
+ * two-column sample sheet this uploader expects.
+ */
+export function isGeoSoftFile(fileName, text = '') {
+  const name = String(fileName || '').toLowerCase();
+  if (name.endsWith('.soft') || name.endsWith('.soft.gz')) return true;
+  return /^\s*[\^!](SERIES|Series_|Sample_|Platform_|DATABASE)/m.test(String(text).slice(0, 5000));
+}
+
 export function detectMetadataColumns(headers = []) {
   const cleaned = headers.map((header) => String(header ?? '').trim());
   const keyed = cleaned.map((header) => ({ header, key: headerKey(header) }));
