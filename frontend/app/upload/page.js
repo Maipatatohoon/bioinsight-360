@@ -15,6 +15,7 @@ import {
     detectMetadataColumns,
     isGeoSoftFile,
     suggestGroupsFromSampleNames,
+    validateMetadataAssignments,
 } from '../../lib/metadataUpload';
 import { parseGeoMetadata } from '../../lib/geoMetadata';
 
@@ -222,6 +223,7 @@ export default function UploadPage() {
 
     // Group Selection State
     const [uniqueGroups, setUniqueGroups] = useState(['Control', 'Treated']);
+    const [newConditionLabel, setNewConditionLabel] = useState('');
     const [selectedCtrl, setSelectedCtrl] = useState('Control');
     const [selectedTrt, setSelectedTrt] = useState('Treated');
     const [metadataReport, setMetadataReport] = useState(null);
@@ -717,48 +719,52 @@ export default function UploadPage() {
                             <span style={{ color: '#64748b' }}>Used for quick evaluation without files</span>
                         </div>
 
-                        <div style={{ marginTop: '2rem', padding: '1.25rem 1.5rem', background: '#faf5ff', border: '2px dashed #c4b5fd', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                            <div style={{ maxWidth: '680px' }}>
-                                <h3 style={{ margin: 0, color: '#5b21b6', fontSize: '1.05rem' }}>2. Sample metadata (optional)</h3>
-                                <p style={{ margin: '0.35rem 0 0 0', color: '#6d28d9', fontSize: '0.88rem', lineHeight: 1.5 }}>
-                                    Upload a <strong>CSV/TSV</strong> with Sample and Group columns, or a GEO
-                                    <strong> series matrix</strong> / <strong>SOFT family</strong> file — groups are read
-                                    from its sample titles and characteristics. A count matrix is always required;
-                                    metadata only tells the app which samples are control and treatment.
-                                </p>
-                                {pendingMetadata ? (
-                                    <div style={{ marginTop: '0.5rem', color: '#047857', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <strong>✓ {pendingMetadata.fileName} selected.</strong>
-                                        <span>It will be matched when you upload the count matrix.</span>
-                                        <button onClick={() => setPendingMetadata(null)} style={{ padding: '0.15rem 0.5rem', background: '#fff', color: '#6d28d9', border: '1px solid #c4b5fd', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                                            Remove
-                                        </button>
-                                    </div>
-                                ) : metadataReport?.source === 'metadata' ? (
-                                    <div style={{ marginTop: '0.5rem', color: metadataReport.ok ? '#047857' : '#b91c1c', fontSize: '0.85rem' }}>
-                                        <strong>{metadataReport.ok ? '✓ Metadata applied' : 'Metadata not applied'}:</strong> {metadataReport.fileName}
-                                        {!metadataReport.ok && metadataReport.error ? ` — ${metadataReport.error}` : ''}
-                                    </div>
-                                ) : (
-                                    <div style={{ marginTop: '0.5rem', color: '#7c3aed', fontSize: '0.82rem' }}>
-                                        No metadata file selected. Without it, assign groups manually after loading counts.
-                                    </div>
-                                )}
+                        <details style={{ marginTop: '2rem', background: '#faf5ff', border: '2px dashed #c4b5fd', borderRadius: '12px', padding: '0.75rem 1rem' }}>
+                            <summary style={{ cursor: 'pointer', color: '#5b21b6', fontWeight: 600, fontSize: '0.95rem', listStyle: 'none' }}>
+                                Advanced: use an existing metadata CSV (optional) — click to expand
+                            </summary>
+                            <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                <div style={{ maxWidth: '680px' }}>
+                                    <p style={{ margin: '0.35rem 0 0 0', color: '#6d28d9', fontSize: '0.88rem', lineHeight: 1.5 }}>
+                                        Upload a <strong>CSV/TSV</strong> with Sample and Group columns, or a GEO
+                                        <strong> series matrix</strong> / <strong>SOFT family</strong> file — groups are read
+                                        from its sample titles and characteristics. A count matrix is always required;
+                                        metadata only tells the app which samples are control and treatment.
+                                    </p>
+                                    {pendingMetadata ? (
+                                        <div style={{ marginTop: '0.5rem', color: '#047857', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <strong>✓ {pendingMetadata.fileName} selected.</strong>
+                                            <span>It will be matched when you upload the count matrix.</span>
+                                            <button onClick={() => setPendingMetadata(null)} style={{ padding: '0.15rem 0.5rem', background: '#fff', color: '#6d28d9', border: '1px solid #c4b5fd', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                Remove
+                                            </button>
+                                        </div>
+                                    ) : metadataReport?.source === 'metadata' ? (
+                                        <div style={{ marginTop: '0.5rem', color: metadataReport.ok ? '#047857' : '#b91c1c', fontSize: '0.85rem' }}>
+                                            <strong>{metadataReport.ok ? '✓ Metadata applied' : 'Metadata not applied'}:</strong> {metadataReport.fileName}
+                                            {!metadataReport.ok && metadataReport.error ? ` — ${metadataReport.error}` : ''}
+                                        </div>
+                                    ) : (
+                                        <div style={{ marginTop: '0.5rem', color: '#7c3aed', fontSize: '0.82rem' }}>
+                                            No metadata file selected. Groups can be assigned directly in the table below.
+                                        </div>
+                                    )}
+                                </div>
+                                <label style={{ padding: '0.65rem 1.1rem', background: '#7c3aed', color: '#fff', border: '1px solid #6d28d9', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    Upload Metadata
+                                    <input
+                                        type="file"
+                                        accept=".csv,.tsv,.txt,.gz,.soft"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            handleMetadataFile(file);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
                             </div>
-                            <label style={{ padding: '0.65rem 1.1rem', background: '#7c3aed', color: '#fff', border: '1px solid #6d28d9', borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                Upload Metadata
-                                <input
-                                    type="file"
-                                    accept=".csv,.tsv,.txt,.gz,.soft"
-                                    style={{ display: 'none' }}
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        handleMetadataFile(file);
-                                        e.target.value = '';
-                                    }}
-                                />
-                            </label>
-                        </div>
+                        </details>
                     </div>
                 )}
 
@@ -1109,6 +1115,43 @@ export default function UploadPage() {
                                 )}
                             </div>
                         )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f1f5f9', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#475569', fontWeight: 600 }}>Conditions:</span>
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                {uniqueGroups.filter(g => g !== 'Exclude' && g !== 'Unassigned').map((g) => (
+                                    <span key={g} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.2rem 0.5rem', background: '#e0e7ff', color: '#3730a3', borderRadius: '999px', fontSize: '0.78rem' }}>
+                                        {g}
+                                        <button type="button" onClick={() => setUniqueGroups((prev) => prev.filter((x) => x !== g))} style={{ border: 'none', background: 'transparent', color: '#3730a3', cursor: 'pointer', fontSize: '0.9rem', lineHeight: 1, padding: 0 }}>×</button>
+                                    </span>
+                                ))}
+                                <input
+                                    type="text"
+                                    value={newConditionLabel}
+                                    onChange={(e) => setNewConditionLabel(e.target.value)}
+                                    placeholder="New condition"
+                                    style={{ width: '110px', fontSize: '0.8rem', padding: '0.25rem 0.4rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            const label = newConditionLabel.trim();
+                                            if (label && !uniqueGroups.includes(label)) {
+                                                setUniqueGroups((prev) => [...prev, label]);
+                                            }
+                                            setNewConditionLabel('');
+                                        }
+                                    }}
+                                />
+                                <button type="button" onClick={() => {
+                                    const label = newConditionLabel.trim();
+                                    if (label && !uniqueGroups.includes(label)) {
+                                        setUniqueGroups((prev) => [...prev, label]);
+                                    }
+                                    setNewConditionLabel('');
+                                }} style={{ padding: '0.25rem 0.55rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                    Add
+                                </button>
+                            </div>
+                        </div>
                         <div id="group-assignment" style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
                             {metaAssignments.map((m, idx) => {
                                 const sampleName = m.Sample || m.sample || m.ID || m.id || m.Name || m.name || `Sample_${idx}`;
@@ -1192,6 +1235,13 @@ export default function UploadPage() {
                                     const countsStr = Storage.getItem('rawCounts');
                                     if (!countsStr) {
                                         throw new Error("Missing count matrix. Re-upload the count file.");
+                                    }
+                                    const validation = validateMetadataAssignments(metaAssignments, {
+                                        controlGroup: selectedCtrl,
+                                        treatedGroup: selectedTrt,
+                                    });
+                                    if (!validation.ok) {
+                                        throw new Error(validation.errors.join(' '));
                                     }
                                     if (selectedCtrl === selectedTrt) {
                                         throw new Error("Control and treatment groups must be different.");

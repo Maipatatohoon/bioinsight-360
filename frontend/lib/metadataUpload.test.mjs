@@ -9,6 +9,7 @@ import {
   metadataSampleKey,
   suggestGroupsFromSampleNames,
   isGeoSoftFile,
+  validateMetadataAssignments,
 } from './metadataUpload.js';
 
 const assignments = (samples) => samples.map((Sample) => ({ Sample, Group: 'Unassigned' }));
@@ -219,4 +220,58 @@ test('matches metadata by position only when the row counts agree', () => {
   const mismatch = applyMetadataByPosition(counts, rows.slice(0, 3));
   assert.equal(mismatch.ok, false);
   assert.match(mismatch.error, /same length/i);
+});
+
+test('validation rejects fewer than two conditions', () => {
+  const result = validateMetadataAssignments([
+    { Sample: 'S1', Group: 'Control' },
+    { Sample: 'S2', Group: 'Control' },
+    { Sample: 'S3', Group: 'Control' },
+  ], { controlGroup: 'Control', treatedGroup: 'Treated' });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(' '), /At least two different conditions/);
+});
+
+test('validation passes a balanced two-group design', () => {
+  const result = validateMetadataAssignments([
+    { Sample: 'S1', Group: 'Control' },
+    { Sample: 'S2', Group: 'Control' },
+    { Sample: 'S3', Group: 'Treated' },
+    { Sample: 'S4', Group: 'Treated' },
+  ], { controlGroup: 'Control', treatedGroup: 'Treated' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
+});
+
+test('validation flags unassigned samples as a warning, not an error', () => {
+  const result = validateMetadataAssignments([
+    { Sample: 'S1', Group: 'Control' },
+    { Sample: 'S2', Group: 'Control' },
+    { Sample: 'S3', Group: 'Treated' },
+    { Sample: 'S4', Group: 'Unassigned' },
+  ], { controlGroup: 'Control', treatedGroup: 'Treated' });
+  assert.equal(result.ok, true);
+  assert.ok(result.warnings.some((w) => /Unassigned/i.test(w)));
+});
+
+test('validation detects duplicate sample ids', () => {
+  const result = validateMetadataAssignments([
+    { Sample: 'S1', Group: 'Control' },
+    { Sample: 'S1', Group: 'Treated' },
+    { Sample: 'S3', Group: 'Treated' },
+    { Sample: 'S4', Group: 'Treated' },
+  ], { controlGroup: 'Control', treatedGroup: 'Treated' });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(' '), /Duplicate sample IDs/);
+});
+
+test('validation requires at least two replicates per selected group', () => {
+  const result = validateMetadataAssignments([
+    { Sample: 'S1', Group: 'Control' },
+    { Sample: 'S2', Group: 'Treated' },
+    { Sample: 'S3', Group: 'Treated' },
+    { Sample: 'S4', Group: 'Treated' },
+  ], { controlGroup: 'Control', treatedGroup: 'Treated' });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(' '), /Control group "Control" has 1 samples/);
 });

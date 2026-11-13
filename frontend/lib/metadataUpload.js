@@ -404,6 +404,50 @@ export function applyMetadataByPosition(assignments = [], rows = []) {
 }
 
 /** Generate a metadata sheet for the current count matrix. */
+export function validateMetadataAssignments(assignments = [], { controlGroup, treatedGroup, minReplicates = 2 } = {}) {
+    const errors = [];
+    const warnings = [];
+    const samples = assignments.map((row) => String(row.Sample || row.sample || row.ID || row.id || row.Name || row.name || '').trim());
+    const groups = assignments.map((row) => String(row.Group || row.group || '').trim());
+
+    if (samples.length === 0) {
+        errors.push('No samples detected. Upload a count matrix first.');
+        return { ok: false, errors, warnings };
+    }
+    const seen = new Set();
+    const duplicates = [];
+    for (const s of samples) {
+        if (!s) errors.push('A sample has an empty name.');
+        if (seen.has(s)) duplicates.push(s);
+        seen.add(s);
+    }
+    if (duplicates.length) errors.push(`Duplicate sample IDs: ${[...new Set(duplicates)].join(', ')}.`);
+
+    const assigned = groups.filter((g) => g && !/^(unassigned|exclude)$/i.test(g));
+    if (assigned.length === 0) errors.push('No sample has been assigned to a condition.');
+    const uniqueConditions = Array.from(new Set(assigned));
+    if (uniqueConditions.length < 2) errors.push('At least two different conditions are required for differential expression.');
+
+    if (controlGroup && treatedGroup && controlGroup === treatedGroup) {
+        errors.push('Control and treatment groups must be different.');
+    }
+
+    if (controlGroup) {
+        const n = groups.filter((g) => g.toLowerCase() === String(controlGroup).toLowerCase()).length;
+        if (n < minReplicates) errors.push(`Control group "${controlGroup}" has ${n} samples (need at least ${minReplicates}).`);
+    }
+    if (treatedGroup) {
+        const n = groups.filter((g) => g.toLowerCase() === String(treatedGroup).toLowerCase()).length;
+        if (n < minReplicates) errors.push(`Treatment group "${treatedGroup}" has ${n} samples (need at least ${minReplicates}).`);
+    }
+
+    const unassigned = groups.filter((g) => /^(unassigned|exclude)$/i.test(g)).length;
+    if (unassigned > 0) warnings.push(`${unassigned} sample(s) are Unassigned/Excluded and will not be analysed.`);
+
+    return { ok: errors.length === 0, errors, warnings };
+}
+
+/** Generate a metadata sheet for the current count matrix. */
 export function buildMetadataTemplate(assignments = []) {
   const esc = (value) => {
     const text = String(value ?? '');

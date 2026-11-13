@@ -118,6 +118,46 @@ are two ways to connect, and the per-browser choice always wins over the build-t
 **Reset** in the navbar *Backend* popover clears the browser override and falls back to the
 build-time default.
 
+## Keeping the backend URL alive
+
+A free `trycloudflare.com` tunnel is created by the `cloudflared` process inside the Colab
+runtime. It dies when the runtime recycles, when Colab disconnects, or when the process is
+killed — the URL then returns **502** even though the Vercel site is fine. This is the most
+common cause of "the site is broken" during a demo.
+
+### Recovery (about 2 minutes)
+
+1. In Colab: **Runtime → Reconnect** (or run STEP 17 to stop everything cleanly).
+2. Run **STEP 10** (backend), wait for `BACKEND UP`.
+3. Run **STEP 11** (tunnel), copy the new URL.
+4. Run **STEP 12** (worker), wait for `WORKER REGISTERED`.
+5. Verify before pasting anywhere:
+
+   ```sh
+   curl -sS https://<new-url>/health
+   # {"status":"healthy","service":"bioinsight-backend"}
+   ```
+
+6. Open `https://bioinsight-360.vercel.app/?backend=<new-url>`, or paste it in the navbar
+   **Backend → Test & Save**. The dialog refuses to save a URL that fails `/health`, so a
+   502 cannot be stored by accident.
+
+### Avoiding the 502 on the day
+
+The free quick tunnel is fine for development but is the wrong tool for a viva. Options,
+cheapest effort first:
+
+| Option | Cost | URL stability | Note |
+|---|---|---|---|
+| **ngrok free static domain** | free | fixed subdomain | One static domain per account; run `ngrok http 8000 --url https://<name>.ngrok-free.app` in the notebook. Survives a Colab reconnect if the notebook re-runs the command. |
+| **Cloudflare named tunnel** | free, needs a domain on Cloudflare | fixed hostname | `cloudflared tunnel create bioinsight` + a DNS route; token can be stored as a Colab secret. Most reliable of the free options. |
+| **Run the backend on a small VM** | free tier varies | fixed hostname | Fly.io / Render free instances sleep when idle; the first request after sleep is slow. Not ideal for a live demo. |
+| **Local backend + laptop on the same network** | free | `localhost` only | Fine for the viva if you present from your own machine: `bash scripts/start-local.sh`, then open `http://localhost:3000/?backend=http://localhost:8000`. |
+
+For a dissertation defence, the local stack is the lowest-risk choice: no tunnel, no
+Colab, no account limits. Use the Colab tunnel only to give an external examiner a link,
+and generate that link the same morning.
+
 ## Environment variables
 
 | Variable | Used by | Default | Notes |
