@@ -44,8 +44,11 @@ export default function ExpressionHeatmap({ heatmap }) {
           plot_bgcolor: 'transparent',
           font: { color: '#0f172a', size: 11 },
           margin: { l: 90, r: 30, t: 20, b: 120 },
-          xaxis: { tickangle: -45, automargin: true },
-          yaxis: { automargin: true, tickfont: { size: 9 } },
+          // Gene identifiers can be numeric strings (e.g. Entrez IDs). Without an
+          // explicit category axis Plotly coerces them to numbers, which leaves
+          // the heatmap blank for those datasets.
+          xaxis: { type: 'category', tickangle: -45, automargin: true },
+          yaxis: { type: 'category', automargin: true, tickfont: { size: 9 } },
         }}
         useResizeHandler
         style={{ width: '100%', height: '720px' }}

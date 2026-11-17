@@ -248,7 +248,8 @@ test('validation flags unassigned samples as a warning, not an error', () => {
     { Sample: 'S1', Group: 'Control' },
     { Sample: 'S2', Group: 'Control' },
     { Sample: 'S3', Group: 'Treated' },
-    { Sample: 'S4', Group: 'Unassigned' },
+    { Sample: 'S4', Group: 'Treated' },
+    { Sample: 'S5', Group: 'Unassigned' },
   ], { controlGroup: 'Control', treatedGroup: 'Treated' });
   assert.equal(result.ok, true);
   assert.ok(result.warnings.some((w) => /Unassigned/i.test(w)));
